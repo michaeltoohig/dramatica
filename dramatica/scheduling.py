@@ -5,7 +5,6 @@ from dramatica.common import DB, logging
 from dramatica.timeutils import *
 
 
-
 class EventItem():
     def __init__(self, **kwargs):
         self.meta = {
@@ -44,10 +43,10 @@ class ProgrammeEvent():
     start:       Create event at fixed start time (optional). If not specified, end time of previous event is used.
     """
     def __init__(self, programme, **kwargs):
+        self.args.update(kwargs)
         self.programme = programme
         self.db = self.programme.db
         self.asset = self.programme.asset
-        self.args.update(kwargs)
         self.event_order = len(self.programme.events)
         self.items = []
         self.rendered = False
@@ -84,10 +83,8 @@ class ProgrammeEvent():
             next_fixed_start = self.programme.events[self.event_order+1]["start"]
         except:
             next_fixed_start = (23,59)
-        
         if next_fixed_start:
             return self.programme.clock(*next_fixed_start)
-
         return self.get_event_start() + self.get_duration()
 
     def render(self):
@@ -106,15 +103,20 @@ class ProgrammeEvent():
 
 
 class Programme():
-    def __init__(self, day=(2013,12,21), id_channel=1):
-        self.dy, self.dm, self.dd = day
-        self.dt = datetime.datetime(self.dy, self.dm, self.dd)
+    args = {}
+    def __init__(self, **kwargs):
+        self.args.update(kwargs)
+        self.dy, self.dm, self.dd  = self.args.get("day", today())
+        self.id_channel            = self.args.get("id_channel", 1)
+        self.day_start = self.clock(*self.args.get("day_start", (6,00)))
+        
+        self.dt  = datetime.datetime(self.dy, self.dm, self.dd)
         self.dow = self.dt.weekday()
-        self.id_channel = id_channel
-        self.day_start = self.clock(6,00)
 
         self.events = []
         self.promos = []
+
+        self.asset_cache = {}
 
         self.db = DB(":memory:")
         self.db.query("CREATE TABLE assets (id_asset INTEGER, tag TEXT, value TEXT);")
@@ -127,7 +129,9 @@ class Programme():
         
 
     def asset(self, id_asset):
-        return EventItem(id_asset=id_asset, db=self.db)
+        if not id_asset in self.asset_cache:
+            self.asset_cache[id_asset] = EventItem(id_asset=id_asset, db=self.db)    
+        return self.asset_cache[id_asset]
 
     def clock(self, hh, mm):
         dt = datetime.datetime(self.dy, self.dm, self.dd, hh, mm)

@@ -36,7 +36,7 @@ class MusicBlockEvent(ProgrammeEvent):
                             ON    assets.id_asset = history.id_asset 
                             WHERE assets.tag='genre/music' 
                             AND   assets.value='{}'
-                            AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='qc/state' AND value='2')
+                            AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='qc/state' AND value='2') -- FIXME: This should be handled in programme.load_data
                             AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='promoted' AND value='1')
                             ORDER BY history.ts ASC, RANDOM()
                             LIMIT 100
@@ -49,7 +49,7 @@ class MusicBlockEvent(ProgrammeEvent):
                             ON    assets.id_asset = history.id_asset 
                             WHERE assets.tag='genre/music' 
                             AND   assets.value='{}'
-                            AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='qc/state' AND value='2')
+                            AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='qc/state' AND value='2') -- FIXME: This should be handled in programme.load_data
                             AND   assets.id_asset NOT IN (SELECT id_asset FROM assets WHERE tag='promoted' AND value='1')
                             ORDER BY history.ts ASC, RANDOM()
                             LIMIT 100

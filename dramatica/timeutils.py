@@ -14,3 +14,6 @@ def dur(tc):
     hh, mm, ss = [int(i) for i in tc.split(":")]
     return hh*3600 + mm*60 + ss
 
+def today():
+    t = datetime.date.today()
+    return (t.year, t.month, t.day)
