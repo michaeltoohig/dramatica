@@ -38,13 +38,13 @@ class RozhlasPoDrate(ProgrammeEvent):
 class Zpravy(ProgrammeEvent):
     args = {
         "title" : "Zprávy"
-    }
+        }
 
 class Crawler(ProgrammeEvent):
     args = {
-        "title" : "Crawler - (ne)kulturní průvodce",
+        "title" : "Crawler",
         "description" : "Nevíte, kam dnes večer vyrazit? Máme pro vás několik tipů."
-    }
+        }
 
 ## News
 ############################
@@ -52,11 +52,14 @@ class Crawler(ProgrammeEvent):
 
 
 class Movie(ProgrammeEvent):
-    pass
+    args = {
+        "title" : "Movie"
+        }
 
 class ShortFilm(ProgrammeEvent):
-    pass
-
+    args = {
+        "title" : "ShortFilm"
+        }
 
 ## Movies
 #############################
@@ -69,7 +72,7 @@ class PostX(MusicBlockEvent):
         "intro_jingle" : JINGLE_POSTX_INTRO,
         "outro_jingle" : JINGLE_POSTX_OUTRO,
         "jingles" : [JINGLE_POSTX1, JINGLE_POSTX2, JINGLE_POSTX3, JINGLE_POSTX4, JINGLE_POSTX5]
-    }
+        }
 
 class RockingPub(MusicBlockEvent):
     args = {
@@ -77,7 +80,7 @@ class RockingPub(MusicBlockEvent):
         "genre" : "Rock",
         "intro_jingle" : VEDCI_ZJISTILI,
         "jingles" : [VEDCI_ZJISTILI]
-    }    
+        }    
 
 class Nachtmetal(MusicBlockEvent):
     args = {
@@ -86,4 +89,12 @@ class Nachtmetal(MusicBlockEvent):
         "intro_jingle" : JINGLE_METAL_INTRO,
         "jingles" : [JINGLE_METAL],
         "target_duration" : dur("02:00:00")
-    }    
+        }    
+
+class Rocking(MusicBlockEvent):
+    args = {
+        "title" : "Rocking",
+        "genre" : ["Rock", "Pop", "Alt rock"],
+        "intro_jingle" : VEDCI_ZJISTILI,
+        "jingles" : [VEDCI_ZJISTILI]
+        }    

@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import random
+
 from dramatica.common import DB, logging
 from dramatica.timeutils import *
 
@@ -41,6 +43,9 @@ class ProgrammeEvent():
     title:       Event title
     description: Event description
     start:       Create event at fixed start time (optional). If not specified, end time of previous event is used.
+
+    OPTIONAL:
+    jingles:     array of asset id's for jingle selector
     """
     def __init__(self, programme, **kwargs):
         self.args.update(kwargs)
@@ -97,6 +102,25 @@ class ProgrammeEvent():
         end_time   = self.get_event_end()
         target_duration = self["target_duration"] or end_time - start_time
         self.add(duration=target_duration)
+
+
+            
+    def add_jingle(self):
+        if self["jingles"]:
+            id_jingle = random.choice(self["jingles"]) # very sophisticated jingle selector
+            jingle = self.asset(id_jingle)
+            self.add(**jingle.meta)
+
+
+    def add_promo(self):
+        if self.programme.promos:
+            self.add_jingle()
+            
+            id_promo = random.choice(self.programme.promos) # ok. this should be done better
+            promo = self.asset(id_promo)
+            self.add(**promo.meta)
+            
+            self.add_jingle()
 
 
 

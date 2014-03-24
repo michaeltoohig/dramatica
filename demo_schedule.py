@@ -4,7 +4,6 @@
 from dramatica import *
 
 from demo_blocks import *
-from demo_connector import NXConnector
 
 class NXTVProgramme(Programme):
     def structure(self):
@@ -32,9 +31,8 @@ class NXTVProgramme(Programme):
 
         self.add(Crawler, start=(16,55))
         self.add(PostX,  start=(17,00))
-        self.add(Zpravy, start=(18,50))
+        self.add(Zpravy, start=(18,45))
 
-        ### PRIME TIME
 
         # Tomorow promos only
         self.set_promo(promo[(self.dow+1) % 7])
@@ -42,24 +40,39 @@ class NXTVProgramme(Programme):
         if self.dow in [FRI, SAT]:
             self.add(RockingPub, start=(19,00))
             self.add(Nachtmetal, start=(23,59))
+        else:
 
-        elif self.dow == SUN:
-            self.add(ProgrammeEvent, title="Movie of the week")
-            self.add(Zpravy)
-            self.add(ShortFilm)
-            self.add(Nachtmetal) 
+            self.add(Rocking)
 
-        elif self.dow == MON:
-            pass
+            if self.dow == SUN:
+                self.add(ProgrammeEvent, start=(20,00), title="Movie of the week")
+                self.add(Zpravy)
+                self.add(ShortFilm)
+                self.add(Nachtmetal) 
 
-        elif self.dow == TUE:
-            pass
+            elif self.dow == MON:
+                self.add(Movie, start=(20,00), genre="Drama/Horror")
+                self.add(Zpravy)
+                self.add(ShortFilm, genre="Drama/Horror")
+                self.add(Nachtmetal) 
 
-        elif self.dow == WED:
-            pass
+            elif self.dow == TUE:
+                self.add(Movie, start=(20,00), genre=["Political", "Social"])
+                self.add(Zpravy)
+                self.add(ShortFilm, genre=["Political", "Social"])
+                self.add(Nachtmetal) 
 
-        elif self.dow == THU:
-            pass
+            elif self.dow == WED:
+                self.add(ProgrammeEvent, start=(20,00), title="Arts")
+                self.add(Zpravy)
+                self.add(ShortFilm)
+                self.add(Nachtmetal) 
+
+            elif self.dow == THU:
+                self.add(ProgrammeEvent, start=(20,00), title="Technology")
+                self.add(Zpravy)
+                self.add(ShortFilm)
+                self.add(Nachtmetal) 
 
 
 
@@ -81,6 +94,7 @@ class NXTVProgramme(Programme):
 
 
 if __name__ == "__main__":
-    sch = NXTVProgramme(day=(2013,12,21), id_channel=1)
+    #sch = NXTVProgramme(day=(2013,12,21), id_channel=1)
+    sch = NXTVProgramme(id_channel=1)
     sch.structure()
     sch.show()
