@@ -3,7 +3,7 @@
 
 import random
 
-from dramatica.common import DB, logging
+from dramatica.common import CacheDB, logging
 from dramatica.timeutils import *
 
 
@@ -142,14 +142,10 @@ class Programme():
 
         self.asset_cache = {}
 
-        self.db = DB(":memory:")
+        self.db = CacheDB(":memory:")
         self.db.query("CREATE TABLE assets (id_asset INTEGER, tag TEXT, value TEXT);")
         self.db.query("CREATE TABLE history (ts INTEGER PRIMARY KEY, id_asset INTEGER);")
         self.db.commit()
-        
-        logging.debug("Loading data...")
-        self.load_data()
-        logging.debug("Done")
         
 
     def asset(self, id_asset):
@@ -196,16 +192,5 @@ class Programme():
                 at_time += item.get_duration()
 
         print ("\n******************************************************************\n")
-
-
-
-
-    def load_data(self):
-        """Use this to load asset pool and schedule history (asset scheduled before current day)"""
-
-    def structure(self):
-        pass
-
-
 
 

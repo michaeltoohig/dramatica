@@ -10,7 +10,7 @@ else:
     PLATFORM = "linux"
 
 
-class DB(object):
+class CacheDB(object):
     def __init__(self, host):
         self._connect(host)
 
