@@ -6,21 +6,17 @@ import random
 from dramatica.common import CacheDB, logging
 from dramatica.timeutils import *
 
+DEFAULT_BLOCK_DURATION = 600
 
-class EventItem():
+class DramaticaObject(object):
+    default = {
+        "title" : "Unnamed object"
+        }
+
     def __init__(self, **kwargs):
-        self.meta = {
-            "title"    : "-- PLACEHOLDER --",
-            "duration" : "0"
-            }
-
-        if "id_asset" in kwargs and "db" in kwargs:
-            db = kwargs["db"]
-            db.query("SELECT tag, value FROM assets WHERE id_asset = {}".format(kwargs["id_asset"]))
-            for tag, value in db.fetchall():
-                self.meta[tag] = value
-        else:
-            self.meta.update(kwargs)
+        self.meta = {}
+        self.meta.update(self.default)
+        self.meta.update(kwargs)
 
     def __getitem__(self, key):
         return self.meta.get(key, False)
@@ -29,94 +25,119 @@ class EventItem():
         self.meta[key] = value
 
 
-    def get_duration(self):
+
+
+class BlockItem(DramaticaObject):
+    default = {
+        "title"    : "-- PLACEHOLDER --",
+        "duration" : "0"
+        }
+
+    def __init__(self, **kwargs):
+        super(BlockItem, self).__init__()
+        if "id_asset" in kwargs and "db" in kwargs:
+            db = kwargs["db"]
+            db.query("SELECT tag, value FROM assets WHERE id_asset = {}".format(kwargs["id_asset"]))
+            for tag, value in db.fetchall():
+                self.meta[tag] = value
+        self.meta.update(kwargs)
+
+    @property
+    def duration(self):
         return float(self["duration"])
 
 
 
 
-class ProgrammeEvent():
-    args = {}
-    """
-    BASE ARGS:
-
-    title:       Event title
-    description: Event description
-    start:       Create event at fixed start time (optional). If not specified, end time of previous event is used.
-
-    OPTIONAL:
-    jingles:     array of asset id's for jingle selector
-    """
-    def __init__(self, programme, **kwargs):
-        self.args.update(kwargs)
-        self.programme = programme
-        self.db = self.programme.db
-        self.asset = self.programme.asset
-        self.event_order = len(self.programme.events)
+class Block(DramaticaObject):
+    default = {}
+    def __init__(self, rundown, **kwargs):
+        super(Block, self).__init__(**kwargs)
+        self.rundown   = rundown
+        self.db          = self.rundown.db
+        self.asset       = self.rundown.asset
+        self.block_order = len(self.rundown.blocks)
         self.items = []
         self.rendered = False
+        self["title"] = str(self["title"]) + " " + str(self.block_order)
 
-    def __getitem__(self, key):
-        return self.args.get(key, False)
+    @property
+    def block_type(self):
+        return self.__class__.__name__
 
-    def add(self, **kwargs):
-        item = EventItem(**kwargs)
-        self.items.append(item)
-
-    def get_duration(self):
+    @property
+    def duration(self):
         dur = 0
-        for item in self.items:
-            dur += item.get_duration()
+        if self.rendered:
+            for item in self.items:
+                dur += item.duration
+        else:
+            dur = float(self["target_duration"]) or DEFAULT_BLOCK_DURATION
+
         return dur
 
-    def get_event_start(self):
+    @property
+    def scheduled_start(self):
         if self["start"]:
-            return self.programme.clock(*self["start"])
-        return self.get_broadcast_start()
+            return self.rundown.clock(*self["start"])
 
-    def get_broadcast_start(self):
-        if self.event_order == 0:
-            return self.programme.day_start
-        try:
-            return self.programme.events[self.event_order-1].get_event_end()
-        except IndexError:
-            return self.programme.day_start
+        elif self.block_order == 0:
+            return self.rundown.clock(*self.rundown["day_start"])
 
+        return self.rundown.blocks[self.block_order-1].scheduled_end
+        
 
-    def get_event_end(self):
-        try:
-            next_fixed_start = self.programme.events[self.event_order+1]["start"]
-        except:
-            next_fixed_start = (23,59)
-        if next_fixed_start:
-            return self.programme.clock(*next_fixed_start)
-        return self.get_event_start() + self.get_duration()
+    @property
+    def scheduled_end(self):
+        return self.scheduled_start + self.duration
+        # HERE WILL BE MAGIC
+        #next_fixed_start = self.rundown.events[self.block_order+1]["start"]
+        #        except IndexError:
+        #    next_fixed_start = (23,59)
+        
+        #TODO:
+
+    @property
+    def broadcast_start(self):
+        if self.block_order == 0:
+            return self.rundown.day_start
+        return self.rundown.events[self.block_order-1].broadcast_end
+
+    @property 
+    def broadcast_end(self):
+        return self.broadcast_end + self.duration
+
 
     def render(self):
         self.structure()
         self.rendered = True
 
     def structure(self):
-        """ This is going to be reimplemented with actual event structure. Default is placeholder matching event duration"""
-        start_time = max(self.get_event_start(), self.get_broadcast_start())
-        end_time   = self.get_event_end()
+        """ This is going to be reimplemented with actual block structure. Default is placeholder matching block duration"""
+        start_time = max(self.scheduled_start, self.broadcast_start)
+        end_time   = self.scheduled_end
         target_duration = self["target_duration"] or end_time - start_time
         self.add(duration=target_duration)
-
-
             
+
+    def add(self, **kwargs):
+        item = BlockItem(**kwargs)
+        self.items.append(item)
+
+
+
+
     def add_jingle(self):
         if self["jingles"]:
             id_jingle = random.choice(self["jingles"]) # very sophisticated jingle selector
             jingle = self.asset(id_jingle)
             self.add(**jingle.meta)
 
-
     def add_promo(self):
-        if self.programme.promos:
+        if self.rundown.promos:
             self.add_jingle()
             
-            id_promo = random.choice(self.programme.promos) # ok. this should be done better
+            id_promo = random.choice(self.rundown.promos) # ok. this should be done better
             promo = self.asset(id_promo)
             self.add(**promo.meta)
             
@@ -126,71 +147,55 @@ class ProgrammeEvent():
 
 
 
-class Programme():
-    args = {}
+
+
+
+class Rundown(DramaticaObject):
+    default = {
+        "day"        : today(),
+        "id_channel" : 1,
+        "day_start"  : (6,00)
+    }
+
     def __init__(self, **kwargs):
-        self.args.update(kwargs)
-        self.dy, self.dm, self.dd  = self.args.get("day", today())
-        self.id_channel            = self.args.get("id_channel", 1)
-        self.day_start = self.clock(*self.args.get("day_start", (6,00)))
-        
-        self.dt  = datetime.datetime(self.dy, self.dm, self.dd)
-        self.dow = self.dt.weekday()
+        super(Rundown, self).__init__(**kwargs)
 
-        self.events = []
+        self.block_types = {}
+
+        self.blocks = []
         self.promos = []
-
         self.asset_cache = {}
 
         self.db = CacheDB(":memory:")
-        self.db.query("CREATE TABLE assets (id_asset INTEGER, tag TEXT, value TEXT);")
+        self.db.query("CREATE TABLE assets  (id_asset INTEGER, tag TEXT, value TEXT);")
         self.db.query("CREATE TABLE history (ts INTEGER PRIMARY KEY, id_asset INTEGER);")
+        self.db.query("CREATE TABLE future  (ts INTEGER PRIMARY KEY, id_asset INTEGER);")
         self.db.commit()
-        
 
-    def asset(self, id_asset):
-        if not id_asset in self.asset_cache:
-            self.asset_cache[id_asset] = EventItem(id_asset=id_asset, db=self.db)    
-        return self.asset_cache[id_asset]
+
+    @property
+    def dow(self):
+        return datetime.datetime(*self["day"]).weekday()
 
     def clock(self, hh, mm):
-        dt = datetime.datetime(self.dy, self.dm, self.dd, hh, mm)
-        return time.mktime(dt.timetuple())        
+        """Converts hour and minute of current day to unix timestamp"""
+        ttuple = list(self["day"]) + [hh, mm]
+        dt = datetime.datetime(*ttuple)
+        return time.mktime(dt.timetuple())  
 
-    def add(self, event, **kwargs):
-        self.events.append(event(self, **kwargs))
+    def asset(self, id_asset):
+        """Returns BlockItem object created from asset specified by provided id_asset"""
+        if not id_asset in self.asset_cache:
+            self.asset_cache[id_asset] = BlockItem(id_asset=id_asset, db=self.db)    
+        return self.asset_cache[id_asset]
 
-    def set_promo(self, clips=[]):
-        self.promos = clips
+    def add(self, block_type, **kwargs):
+        block_type = self.block_types[block_type]
+        self.blocks.append(block_type(self, **kwargs))
 
     def render(self, force=False):
-        self.at_time = self.day_start
-        for event in self.events:
+        self.at_time = self.clock(*self["day_start"])
+        for block in self.blocks:
             if not event.rendered or force:
-                event.structure()
-            self.at_time += event.get_duration()
-
-    def show(self):
-        self.render()
-        at_time = self.day_start
-
-        print ("\n******************************************************************")
-
-        for i, event in enumerate(self.events):
-            broadcast_start = time.strftime("%H:%M", time.localtime(at_time))
-            scheduled_start = time.strftime("%H:%M", time.localtime(event.get_event_start()))
-            print ("\n")
-            print (scheduled_start, broadcast_start, event["title"])
-            print ("------------------------------------------------------------------")
-            for item in event.items:
-                r = time.strftime("%H:%M", time.localtime(at_time))
-                title = item["title"]
-                try:
-                    print ("      {} {!s}".format(r, title))
-                except:
-                    print ("      {} {!s}".format(r, item["id_asset"]))
-                at_time += item.get_duration()
-
-        print ("\n******************************************************************\n")
-
-
+                block.structure()
+            self.at_time += block.duration

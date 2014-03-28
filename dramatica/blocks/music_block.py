@@ -10,7 +10,8 @@ __manifest__ = {
 }
 
 import random
-from dramatica import *
+import dramatica
+from dramatica.timeutils import *
 
 
 DEFAULT_MUSIC_BLOCK_DURATION = 3600
@@ -20,7 +21,7 @@ DEFAULT_JINGLE_SPAN          = 600
 DEFAULT_PROMO_SPAN           = 1200
 
 
-class MusicBlockEvent(ProgrammeEvent):
+class MusicBlock(dramatica.Block):
     def structure(self):
         start_time = max(self.get_event_start(), self.get_broadcast_start())
         end_time   = self.get_event_end()

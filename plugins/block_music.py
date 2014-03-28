@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from dramatica.scheduling import *
-from dramatica.blocks.music_block import MusicBlockEvent
+import dramatica
+from dramatica.timeutils import *
+from dramatica.blocks.music_block import MusicBlock
 
 
 JINGLE_POSTX_INTRO   = 1293
@@ -22,20 +23,20 @@ VEDCI_ZJISTILI       = 1304
 
 
 
-class RanniSrani(ProgrammeEvent):
-    args = {
+class RanniSrani(dramatica.Block):
+    default = {
         "title" : "Ranní srani",
         "description" : ""
         }
 
-class RozhlasPoDrate(ProgrammeEvent):
-    args = {
+class RozhlasPoDrate(dramatica.Block):
+    default = {
         "title" : "Rozhlas po drate",
         "description" : "Hrajeme vam k praci"
         }
 
-class PostX(MusicBlockEvent):
-    args = {
+class PostX(MusicBlock):
+    default = {
         "title" : "PostX",
         "genre" : "Alt rock",
         "intro_jingle" : JINGLE_POSTX_INTRO,
@@ -43,16 +44,16 @@ class PostX(MusicBlockEvent):
         "jingles" : [JINGLE_POSTX1, JINGLE_POSTX2, JINGLE_POSTX3, JINGLE_POSTX4, JINGLE_POSTX5]
         }
 
-class RockingPub(MusicBlockEvent):
-    args = {
+class RockingPub(MusicBlock):
+    default = {
         "title" : "Rocking Pub",
         "genre" : "Rock",
         "intro_jingle" : VEDCI_ZJISTILI,
         "jingles" : [VEDCI_ZJISTILI]
         }    
 
-class Nachtmetal(MusicBlockEvent):
-    args = {
+class Nachtmetal(MusicBlock):
+    default = {
         "title" : "Nachtmetal",
         "genre" : "Metal",
         "intro_jingle" : JINGLE_METAL_INTRO,
@@ -60,10 +61,26 @@ class Nachtmetal(MusicBlockEvent):
         "target_duration" : dur("02:00:00")
         }    
 
-class Rocking(MusicBlockEvent):
-    args = {
+class Rocking(MusicBlock):
+    default = {
         "title" : "Rocking",
         "genre" : ["Rock", "Pop", "Alt rock"],
         "intro_jingle" : VEDCI_ZJISTILI,
         "jingles" : [VEDCI_ZJISTILI]
         }    
+
+
+
+__manifest__ = {
+    "title"       : "nxtv music blocks",
+    "author"      : "martas@imm.cz",
+    "type"        : "dramatica/block",
+    "export"      : {
+                    "RanniSrani" : RanniSrani,
+                    "RozhlasPoDrate" : RozhlasPoDrate,
+                    "PostX" : PostX,
+                    "RockingPub" : RockingPub,
+                    "Nachtmetal" : Nachtmetal,
+                    "Rocking" : Rocking,
+                    }
+}
