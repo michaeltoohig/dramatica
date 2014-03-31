@@ -8,6 +8,7 @@ from dramatica.timeutils import *
 
 DEFAULT_BLOCK_DURATION = 600
 
+
 class DramaticaObject(object):
     default = {
         "title" : "Unnamed object"
@@ -23,8 +24,6 @@ class DramaticaObject(object):
 
     def __setitem__(self, key, value):
         self.meta[key] = value
-
-
 
 
 class BlockItem(DramaticaObject):
@@ -47,8 +46,6 @@ class BlockItem(DramaticaObject):
         return float(self["duration"])
 
 
-
-
 class Block(DramaticaObject):
     default = {}
     def __init__(self, rundown, **kwargs):
@@ -59,7 +56,6 @@ class Block(DramaticaObject):
         self.block_order = len(self.rundown.blocks)
         self.items = []
         self.rendered = False
-        self["title"] = str(self["title"]) + " " + str(self.block_order)
 
     @property
     def block_type(self):
@@ -89,13 +85,21 @@ class Block(DramaticaObject):
 
     @property
     def scheduled_end(self):
-        return self.scheduled_start + self.duration
-        # HERE WILL BE MAGIC
-        #next_fixed_start = self.rundown.events[self.block_order+1]["start"]
-        #        except IndexError:
-        #    next_fixed_start = (23,59)
-        
-        #TODO:
+        try:
+            remaining_blocks = self.rundown.blocks[self.block_order+1:]
+        except:
+            return self.rundown.day_end
+
+        inter_blocks = 1
+        for block in remaining_blocks:
+           # print ("REM,",self["title"],"---->",  block["title"])
+            next_fixed_start = block["start"]
+            if next_fixed_start:
+                rdur = (self.rundown.clock(*next_fixed_start) - self.scheduled_start) / inter_blocks
+                return  self.scheduled_start + rdur
+            inter_blocks += 1
+
+        return self.scheduled_start + ((self.rundown.day_end - self.scheduled_start) / inter_blocks)
 
     @property
     def broadcast_start(self):
@@ -123,8 +127,6 @@ class Block(DramaticaObject):
     def add(self, **kwargs):
         item = BlockItem(**kwargs)
         self.items.append(item)
-
-
 
 
     def add_jingle(self):
@@ -183,6 +185,10 @@ class Rundown(DramaticaObject):
         dt = datetime.datetime(*ttuple)
         return time.mktime(dt.timetuple())  
 
+    @property 
+    def day_end(self):
+        return self.clock(23,59)
+
     def asset(self, id_asset):
         """Returns BlockItem object created from asset specified by provided id_asset"""
         if not id_asset in self.asset_cache:
@@ -192,6 +198,8 @@ class Rundown(DramaticaObject):
     def add(self, block_type, **kwargs):
         block_type = self.block_types[block_type]
         self.blocks.append(block_type(self, **kwargs))
+        if self.blocks[-1]["instant_render"]:
+            self.blocks[-1].render()
 
     def render(self, force=False):
         self.at_time = self.clock(*self["day_start"])
