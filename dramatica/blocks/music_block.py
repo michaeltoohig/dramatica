@@ -22,6 +22,10 @@ DEFAULT_PROMO_SPAN           = 1200
 
 
 class MusicBlock(dramatica.Block):
+    def __init__(self, rundown, **kwargs):
+        super(MusicBlock, self).__init__(rundown, **kwargs)
+        self["full_auto"] = True
+
     def structure(self):
         start_time = max(self.get_event_start(), self.get_broadcast_start())
         end_time   = self.get_event_end()

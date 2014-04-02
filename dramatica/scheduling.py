@@ -28,8 +28,9 @@ class DramaticaObject(object):
 
 class BlockItem(DramaticaObject):
     default = {
-        "title"    : "-- PLACEHOLDER --",
-        "duration" : "0"
+        "title"     : "(dramatica auto object)",
+        "item_type" : "auto",
+        "duration"  : "0"
         }
 
     def __init__(self, **kwargs):
@@ -92,7 +93,6 @@ class Block(DramaticaObject):
 
         inter_blocks = 1
         for block in remaining_blocks:
-           # print ("REM,",self["title"],"---->",  block["title"])
             next_fixed_start = block["start"]
             if next_fixed_start:
                 rdur = (self.rundown.clock(*next_fixed_start) - self.scheduled_start) / inter_blocks
@@ -113,21 +113,29 @@ class Block(DramaticaObject):
 
 
     def render(self):
+        _newitems = [item for item in self.items if item["item_type"] != "placeholder"]
+        self.items = _newitems
         self.structure()
         self.rendered = True
 
     def structure(self):
-        """ This is going to be reimplemented with actual block structure. Default is placeholder matching block duration"""
-        start_time = max(self.scheduled_start, self.broadcast_start)
-        end_time   = self.scheduled_end
-        target_duration = self["target_duration"] or end_time - start_time
-        self.add(duration=target_duration)
+        """This is going to be reimplemented with actual block structure. Default is placeholder matching block duration"""
             
-
     def add(self, **kwargs):
         item = BlockItem(**kwargs)
         self.items.append(item)
 
+    def add_placeholder(self, **kwargs):
+        item = BlockItem(**kwargs)
+        item["item_type"] = "placeholder"
+        item["title"] = kwargs.get("title", "( dramatica placeholder )")
+        self.items.append(item)
+
+    def add_default_placeholder(self):
+        start_time = self.scheduled_start
+        end_time   = self.scheduled_end
+        target_duration = self["target_duration"] or end_time - start_time
+        self.add_placeholder(duration=target_duration)
 
     def add_jingle(self):
         if self["jingles"]:
@@ -195,11 +203,14 @@ class Rundown(DramaticaObject):
             self.asset_cache[id_asset] = BlockItem(id_asset=id_asset, db=self.db)    
         return self.asset_cache[id_asset]
 
-    def add(self, block_type, **kwargs):
-        block_type = self.block_types[block_type]
+    def add(self, block_type_name, **kwargs):
+        block_type = self.block_types[block_type_name]
         self.blocks.append(block_type(self, **kwargs))
+        self.blocks[-1]["block_type"] = block_type_name
         if self.blocks[-1]["instant_render"]:
             self.blocks[-1].render()
+        elif self.blocks[-1]["full_auto"]:
+            self.blocks[-1].add_default_placeholder()
 
     def render(self, force=False):
         self.at_time = self.clock(*self["day_start"])

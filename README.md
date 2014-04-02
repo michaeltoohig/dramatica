@@ -34,6 +34,7 @@ Base classes
 
  - `target_duration`
  - `instant_render` (boolean). specifies, if the block should be rendered during *schedule* pass. useful for movie blocks without fixed duration.
+ - `full_auto` - This block is created entirely by dramatica (full_lenght placeholder is added during schedule pass)
  - `jingles` -  array of asset id's for jingle selector
 
 #### Properties
@@ -50,10 +51,10 @@ Base classes
  - `structure` - by default, creates placeholder item matching block duration. should be reimplemented.
  - `render` - call this to create block structure. 
  - `add` - adds item at the end of playlist. 
+ - `add_placeholder`
+ - `add_default_placeholder`
  - `add_jingle` - should be called from 
  - `add_promo`
-
-
 
 
 
