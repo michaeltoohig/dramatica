@@ -26,7 +26,8 @@ class Rundown(dramatica.Rundown):
             SAT : [],
             SUN : []
             }
-
+        
+        
         # Weighted promos - For today and tomorow (2:1 ratio)
         self["promo"] = promo[self.dow] * 2 + promo[(self.dow+1) % 7]
         
@@ -82,4 +83,4 @@ class Rundown(dramatica.Rundown):
              #   self.add(EmptyBlock, start=(20,00), title="Technology")
                 self.add("Zpravy")
                 self.add("ShortFilm")
-                self.add("Nachtmetal") 
+                self.add("Nachtmetal")

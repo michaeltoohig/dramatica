@@ -6,20 +6,19 @@ __manifest__ = {
     "description" : "Simple music selector",
     "author"      : "martas@imm.cz",
     "type"        : "plugin/dramatica",
-    "export"      : "MusicBlockEvent"
+    "export"      : "MusicBlock"
 }
 
 import random
 import dramatica
 from dramatica.timeutils import *
 
-
 DEFAULT_MUSIC_BLOCK_DURATION = 3600
 DEFAULT_PROMOTED_RATIO       = (1,2)
 DEFAULT_ARTIST_SPAN          = 5
 DEFAULT_JINGLE_SPAN          = 600
 DEFAULT_PROMO_SPAN           = 1200
-
+POOL_RESERVE                 = 1.2
 
 class MusicBlock(dramatica.Block):
     def __init__(self, rundown, **kwargs):
@@ -27,15 +26,15 @@ class MusicBlock(dramatica.Block):
         self["full_auto"] = True
 
     def structure(self):
-        start_time = max(self.get_event_start(), self.get_broadcast_start())
-        end_time   = self.get_event_end()
+        start_time = self.broadcast_start
+        end_time   = self.scheduled_end
         target_duration = self["target_duration"] or end_time - start_time
-        logging.debug("{}: Music block event /w dur {:0n}s".format(self["title"], target_duration))
+
+        print ("{} Target duration is {}".format(self["title"], target_duration))
 
         ######################################################################
         # Promoted / not promoted .... this should be done much much better
 
-        # how many promoted songs are used. Default is 1 promoted to 2 not
         promoted_ratio = self["promoted_ratio"] or DEFAULT_PROMOTED_RATIO
         jingle_span    = self["jingle_span"] or DEFAULT_JINGLE_SPAN
         promo_span     = self["promo_span"] or DEFAULT_PROMO_SPAN
@@ -53,7 +52,6 @@ class MusicBlock(dramatica.Block):
                             ON    assets.id_asset = history.id_asset 
                             WHERE assets.tag='genre/music' 
                             {genre_cond}
-                            AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='qc/state' AND value='2') -- FIXME: This should be handled in programme.load_data
                             AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='promoted' AND value='1')
                             ORDER BY history.ts ASC, RANDOM()
                             LIMIT 100
@@ -66,7 +64,6 @@ class MusicBlock(dramatica.Block):
                             ON    assets.id_asset = history.id_asset 
                             WHERE assets.tag='genre/music' 
                             {genre_cond}
-                            AND   assets.id_asset IN (SELECT id_asset FROM assets WHERE tag='qc/state' AND value='2') -- FIXME: This should be handled in programme.load_data
                             AND   assets.id_asset NOT IN (SELECT id_asset FROM assets WHERE tag='promoted' AND value='1')
                             ORDER BY history.ts ASC, RANDOM()
                             LIMIT 100
@@ -74,16 +71,16 @@ class MusicBlock(dramatica.Block):
 
         pool_normal = [i[0] for i in self.db.fetchall()]
 
-        song_pool =[]
+        song_pool = []
         pool_dur = 0
-        while (pool_promoted or pool_normal) and pool_dur < target_duration : #FIXME:.... chce to nejakou rezervu....
+        while (pool_promoted or pool_normal) and pool_dur < target_duration * POOL_RESERVE:
           
             for i in range(promoted_ratio[0]):
                 if pool_promoted:
                     id_asset = pool_promoted.pop(0)
                     asset = self.asset(id_asset)
-                    pool_dur += asset.get_duration()
                     song_pool.append(asset)
+                    pool_dur += asset.duration
                 else:
                     break
 
@@ -91,38 +88,61 @@ class MusicBlock(dramatica.Block):
                 if pool_normal:
                     id_asset = pool_normal.pop(0)
                     asset = self.asset(id_asset)
-                    pool_dur += asset.get_duration()
                     song_pool.append(asset)
+                    pool_dur += asset.duration
                 else:
                     break
+
+        print ("SONG POOL", self["title"], len(song_pool))
 
         # Promoted / not promoted, - song pool generation
         ######################################################################
 
         if self["intro_jingle"]:
-            self.add(id_asset=self["intro_jingle"], title="{} - Intro Jingle".format(self["title"]))
+            self.add(self.asset(self["intro_jingle"]))
 
         last_jingle = 0
         last_promo  = 0
+        current_duration = 0
 
 
-        while self.get_duration() < target_duration:
-            i = random.randrange(0,len(song_pool))
-            a = song_pool.pop(i)
-            self.add(**a.meta)
+        while song_pool:
+            
+            # BPM/MOOD SELECTOR GOES HERE
+            asset_index = random.randrange(0, len(song_pool))
+            asset = song_pool.pop(asset_index)
 
-            remaining = target_duration - self.get_duration()
 
-            if remaining > promo_span and self.get_duration() - last_promo > promo_span:
-                self.add_promo()
-                last_promo = self.get_duration()
-            elif remaining > jingle_span and self.get_duration() - last_jingle > jingle_span:
-                self.add_jingle()
-                last_jingle = self.get_duration()
+            self.add(asset)
+            current_duration += asset.duration
+            remaining = target_duration - current_duration
+            pool_dur -= asset.duration
+            avg_dur   = pool_dur / len(song_pool)
+
+            if remaining < 0:
+                break
+
+            if remaining < avg_dur * 1.5:
+
+                print("{}s remaining. Which is less than {}s maximum".format(remaining, avg_dur))
+                asset = sorted(song_pool, key=lambda song: abs(song.duration - remaining ))[0]
+                self.add(asset)
+                break
+
+            if remaining > promo_span and current_duration - last_promo > promo_span:
+                if self.add_promo():
+                    last_promo = current_duration
+                    last_jingle = current_duration
+                    current_duration += self.items[-1].duration
+
+            if remaining > jingle_span and current_duration - last_jingle > jingle_span:
+                if self.add_jingle():
+                    last_jingle = current_duration
+                    current_duration += self.items[-1].duration
 
 
         if self["outro_jingle"]:
-            self.add(id_asset=self["outro_jingle"], title="{} - Outro Jingle".format(self["title"]))
+            self.add(self.asset(self["intro_jingle"]))
 
 
 

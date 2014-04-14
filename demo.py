@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import sys
 import time
 import dramatica
 
@@ -23,9 +24,8 @@ class MyLittleSqlitePoweredFakeMAMSystem(dramatica.Dramatica):
         for id_asset, tag, value in src_db.fetchall():
             self.rundown.db.query("INSERT INTO assets (id_asset, tag, value) VALUES ({}, '{}', '{}')".format(id_asset, tag, self.rundown.db.sanit(value)))
 
-    def on_structure(self, date, id_channel):
-        self.load_data()
 
+    def on_structure(self, date, id_channel):
         start_time = datestr2ts(date)
         end_time   = start_time + (3600*24)
 
@@ -34,21 +34,34 @@ class MyLittleSqlitePoweredFakeMAMSystem(dramatica.Dramatica):
         self.rundown["id_channel"] = id_channel
         self.rundown.structure()
 
-        print ("\n\nRUNDOWN FOR {}".format(date))
+
+    def on_cleanup(self, date, id_channel):
+        for block in self.rundown.blocks:
+            if not block.rendered:
+                block.render()
+
+
+
+
+    def show(self):
+        print ("\n\nRUNDOWN FOR {}".format(self.rundown["day"]))
         print ("======================\n")
         for i, block in enumerate(self.rundown.blocks):
             scheduled_start = time.strftime("%H:%M", time.localtime(block.scheduled_start))
             scheduled_end   = time.strftime("%H:%M", time.localtime(block.scheduled_end))
             print (scheduled_start, scheduled_end,  block["title"])
-            print ()
-
-        
-    def on_cleanup(self, date, id_channel):
-        self.load_data(date, id_channel)
-
-
+            print ("---------------------------------------------------------------------------")
+            for j, item in enumerate(block.items):
+                print("           ", item["title"])
+            print("\n")
 
 
 if __name__ == "__main__":
     drama = MyLittleSqlitePoweredFakeMAMSystem(PLUGIN_PATH)
+    
+    drama.load_data()
+    
     drama.on_structure(time.strftime("%Y-%m-%d"), 1)
+    drama.on_cleanup(time.strftime("%Y-%m-%d"), 1)
+    
+    drama.show()

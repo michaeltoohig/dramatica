@@ -37,10 +37,12 @@ class BlockItem(DramaticaObject):
         super(BlockItem, self).__init__()
         if "id_asset" in kwargs and "db" in kwargs:
             db = kwargs["db"]
+            del(kwargs["db"])
             db.query("SELECT tag, value FROM assets WHERE id_asset = {}".format(kwargs["id_asset"]))
             for tag, value in db.fetchall():
                 self.meta[tag] = value
         self.meta.update(kwargs)
+
 
     @property
     def duration(self):
@@ -65,11 +67,13 @@ class Block(DramaticaObject):
     @property
     def duration(self):
         dur = 0
-        if self.rendered:
+        if self.items:
             for item in self.items:
                 dur += item.duration
         else:
-            dur = float(self["target_duration"]) or DEFAULT_BLOCK_DURATION
+            start_time = self.broadcast_start
+            end_time   = self.scheduled_end
+            dur = self["target_duration"] or end_time - start_time
 
         return dur
 
@@ -79,7 +83,7 @@ class Block(DramaticaObject):
             return self.rundown.clock(*self["start"])
 
         elif self.block_order == 0:
-            return self.rundown.clock(*self.rundown["day_start"])
+            return self.rundown.day_start
 
         return self.rundown.blocks[self.block_order-1].scheduled_end
         
@@ -95,21 +99,32 @@ class Block(DramaticaObject):
         for block in remaining_blocks:
             next_fixed_start = block["start"]
             if next_fixed_start:
-                rdur = (self.rundown.clock(*next_fixed_start) - self.scheduled_start) / inter_blocks
-                return  self.scheduled_start + rdur
+                next_fixed_start = self.rundown.clock(*next_fixed_start)
+                break
             inter_blocks += 1
+        else:
+            next_fixed_start = self.rundown.day_end
 
-        return self.scheduled_start + ((self.rundown.day_end - self.scheduled_start) / inter_blocks)
+        scheduled_end = self.scheduled_start + ((next_fixed_start - self.scheduled_start) / inter_blocks)
+        if inter_blocks > 1:
+            scheduled_end = scheduled_end - (scheduled_end % 300) #Round down to 5 mins
+        return scheduled_end
+
+
 
     @property
     def broadcast_start(self):
         if self.block_order == 0:
             return self.rundown.day_start
-        return self.rundown.events[self.block_order-1].broadcast_end
+        return self.rundown.blocks[self.block_order-1].broadcast_end
+        
 
     @property 
     def broadcast_end(self):
-        return self.broadcast_end + self.duration
+        if self.rendered and self.items:
+            return self.broadcast_start + self.duration
+        else:
+            return self.scheduled_end
 
 
     def render(self):
@@ -120,19 +135,21 @@ class Block(DramaticaObject):
 
     def structure(self):
         """This is going to be reimplemented with actual block structure. Default is placeholder matching block duration"""
+        self.add_default_placeholder()
             
-    def add(self, **kwargs):
-        item = BlockItem(**kwargs)
+    def add(self, item, **kwargs):
+        assert type(item) == BlockItem
         self.items.append(item)
+        self.items[-1].meta.update(kwargs)
 
     def add_placeholder(self, **kwargs):
         item = BlockItem(**kwargs)
         item["item_type"] = "placeholder"
-        item["title"] = kwargs.get("title", "( dramatica placeholder )")
+        item["title"] = kwargs.get("title", "(DRAMATICA PLACEHOLDER)")
         self.items.append(item)
 
     def add_default_placeholder(self):
-        start_time = self.scheduled_start
+        start_time = self.broadcast_start
         end_time   = self.scheduled_end
         target_duration = self["target_duration"] or end_time - start_time
         self.add_placeholder(duration=target_duration)
@@ -141,7 +158,9 @@ class Block(DramaticaObject):
         if self["jingles"]:
             id_jingle = random.choice(self["jingles"]) # very sophisticated jingle selector
             jingle = self.asset(id_jingle)
-            self.add(**jingle.meta)
+            self.add(jingle)
+            return True
+        return False
 
     def add_promo(self):
         if self.rundown.promos:
@@ -149,9 +168,11 @@ class Block(DramaticaObject):
             
             id_promo = random.choice(self.rundown.promos) # ok. this should be done better
             promo = self.asset(id_promo)
-            self.add(**promo.meta)
+            self.add(promo.meta)
             
             self.add_jingle()
+            return True
+        return False
 
 
 
@@ -179,23 +200,32 @@ class Rundown(DramaticaObject):
         self.db = CacheDB(":memory:")
         self.db.query("CREATE TABLE assets  (id_asset INTEGER, tag TEXT, value TEXT);")
         self.db.query("CREATE TABLE history (ts INTEGER PRIMARY KEY, id_asset INTEGER);")
-        self.db.query("CREATE TABLE future  (ts INTEGER PRIMARY KEY, id_asset INTEGER);")
         self.db.commit()
 
-
-    @property
-    def dow(self):
-        return datetime.datetime(*self["day"]).weekday()
 
     def clock(self, hh, mm):
         """Converts hour and minute of current day to unix timestamp"""
         ttuple = list(self["day"]) + [hh, mm]
         dt = datetime.datetime(*ttuple)
+        tstamp = time.mktime(dt.timetuple())  
+        if tstamp < self.day_start:
+            tstamp += 3600*24
+        return tstamp
+
+    @property
+    def dow(self):
+        return datetime.datetime(*self["day"]).weekday()
+
+    @property
+    def day_start(self):
+        ttuple = list(self["day"]) + list(self["day_start"])
+        dt = datetime.datetime(*ttuple)
         return time.mktime(dt.timetuple())  
 
     @property 
     def day_end(self):
-        return self.clock(23,59)
+        return self.day_start + (24*3600)
+
 
     def asset(self, id_asset):
         """Returns BlockItem object created from asset specified by provided id_asset"""
@@ -204,7 +234,7 @@ class Rundown(DramaticaObject):
         return self.asset_cache[id_asset]
 
     def add(self, block_type_name, **kwargs):
-        block_type = self.block_types[block_type_name]
+        block_type = self.block_types.get(block_type_name, Block)
         self.blocks.append(block_type(self, **kwargs))
         self.blocks[-1]["block_type"] = block_type_name
         if self.blocks[-1]["instant_render"]:
@@ -213,8 +243,8 @@ class Rundown(DramaticaObject):
             self.blocks[-1].add_default_placeholder()
 
     def render(self, force=False):
-        self.at_time = self.clock(*self["day_start"])
+        self.at_time = self.day_start
         for block in self.blocks:
-            if not event.rendered or force:
-                block.structure()
+            if not block.rendered or force:
+                block.render()
             self.at_time += block.duration
