@@ -6,7 +6,7 @@ import dramatica
 
 class Zpravy(dramatica.Block):
     default = {
-        "title" : "Zpravy"
+        "title" : "Zprávy"
         }
 
 class Crawler(dramatica.Block):

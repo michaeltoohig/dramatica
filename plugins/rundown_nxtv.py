@@ -26,8 +26,7 @@ class Rundown(dramatica.Rundown):
             SAT : [],
             SUN : []
             }
-        
-        
+
         # Weighted promos - For today and tomorow (2:1 ratio)
         self["promo"] = promo[self.dow] * 2 + promo[(self.dow+1) % 7]
         
@@ -41,22 +40,22 @@ class Rundown(dramatica.Rundown):
 
 
         self.add("Crawler", start=(16,55))
-        self.add("PostX",  start=(17,00))
-        self.add("Zpravy", start=(18,45), title="Hlavni zpravy")
-
+        self.add("PostX",   start=(17,00))
+        self.add("Zpravy",  start=(18,45), title="Hlavní zprávy")
 
         # Tomorow promos only
         self["promo"] = promo[(self.dow+1) % 7]
 
+
         if self.dow in [FRI, SAT]:
             self.add("RockingPub", start=(19,00))
-            self.add("Nachtmetal", start=(23,59))
+            self.add("Nachtmetal", start=(1,00))
         else:
 
-            self.add("Rocking")
+            self.add("Rocking", start=(19,00))
 
             if self.dow == SUN:
-               # self.add(EmptyBlock, start=(20,00), title="Movie of the week")
+                self.add("EmptyBlock", start=(20,00), title="Movie of the week")
                 self.add("Zpravy")
                 self.add("ShortFilm")
                 self.add("Nachtmetal") 
@@ -65,22 +64,22 @@ class Rundown(dramatica.Rundown):
                 self.add("Movie", start=(20,00), genre="Drama/Horror")
                 self.add("Zpravy")
                 self.add("ShortFilm", genre="Drama/Horror")
-                self.add("Nachtmetal") 
+                self.add("Nachtmetal", start=(23,00)) 
 
             elif self.dow == TUE:
                 self.add("Movie", start=(20,00), genre=["Political", "Social"])
                 self.add("Zpravy")
                 self.add("ShortFilm", genre=["Political", "Social"])
-                self.add("Nachtmetal") 
+                self.add("Nachtmetal", start=(23,00)) 
 
             elif self.dow == WED:
-             #   self.add("EmptyBlock", start=(20,00), title="Arts")
+                self.add("EmptyBlock", start=(20,00), title="Arts")
                 self.add("Zpravy")
                 self.add("ShortFilm")
-                self.add("Nachtmetal") 
+                self.add("Nachtmetal", start=(23,00)) 
 
             elif self.dow == THU:
-             #   self.add(EmptyBlock, start=(20,00), title="Technology")
+                self.add("EmptyBlock", start=(20,00), title="Technology")
                 self.add("Zpravy")
                 self.add("ShortFilm")
-                self.add("Nachtmetal")
+                self.add("Nachtmetal", start=(23,00)) 

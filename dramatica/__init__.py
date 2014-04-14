@@ -60,6 +60,9 @@ class Dramatica():
             print ("{}  {} ".format(self.ftime(block.scheduled_start), self.ftime(at_time)),  block["title"])
             print ("="*80)
             for j, item in enumerate(block.items):
-                print ("          {} ".format(self.ftime(at_time)),  item["title"])
+                try:
+                    print ("          {} ".format(self.ftime(at_time)),  item["title"])
+                except:
+                    print ("Something with fucked-up encoding")
                 at_time += item.duration
             print("\n")

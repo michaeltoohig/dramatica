@@ -43,19 +43,6 @@ class MyLittleSqlitePoweredFakeMAMSystem(dramatica.Dramatica):
 
 
 
-    def show(self):
-        print ("\n\nRUNDOWN FOR {}".format(self.rundown["day"]))
-        print ("======================\n")
-        for i, block in enumerate(self.rundown.blocks):
-            scheduled_start = time.strftime("%H:%M", time.localtime(block.scheduled_start))
-            scheduled_end   = time.strftime("%H:%M", time.localtime(block.scheduled_end))
-            print (scheduled_start, scheduled_end,  block["title"])
-            print ("---------------------------------------------------------------------------")
-            for j, item in enumerate(block.items):
-                print("           ", item["title"])
-            print("\n")
-
-
 if __name__ == "__main__":
     drama = MyLittleSqlitePoweredFakeMAMSystem(PLUGIN_PATH)
     
