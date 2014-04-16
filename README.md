@@ -17,10 +17,10 @@ Base classes
 ### BlockItem
 
 #### Metadata
-    - `title`
+ - `title`
 
 #### Properties
-    - `duration`
+ - `duration`
 
 
 ### Block
