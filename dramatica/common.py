@@ -1,85 +1,132 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-import sys
 import sqlite3
 
-if sys.platform == "win32":
-    PLATFORM = "windows"
-else:
-    PLATFORM = "linux"
+class DramaticaObject(object):
+    default = {
+        "title" : "Unnamed object"
+        }
+
+    def __init__(self, **kwargs):
+        self.meta = {}
+        self.meta.update(self.default)
+        self.meta.update(kwargs)
+
+    def __getitem__(self, key):
+        return self.meta.get(key, False)
+
+    def __setitem__(self, key, value):
+        self.meta[key] = value
 
 
-class CacheDB(object):
-    def __init__(self, host):
-        self._connect(host)
+class DramaticaAsset(DramaticaObject):
+    def __init__(self, **kwargs):
+        super(DramaticaAsset, self).__init__(**kwargs)
+        self.veto = False
+        self.weights = {}
 
-    def _connect(self, host):    
-        self.conn = sqlite3.connect(host)
+    @property 
+    def id(self):
+        return self["id_object"]
+
+    @property
+    def duration(self):
+        dur = float(self.meta.get("duration",0))
+        mki = float(self.meta.get("mark_in" ,0))
+        mko = float(self.meta.get("mark_out",0))
+        if not dur: return 0
+        if mko > 0: dur -= dur - mko
+        if mki > 0: dur -= mki
+        return dur
+
+    def __repr__(self):
+        t = "Asset ID:{}".format(self.id)
+        if self["title"]:
+            try:
+                t += " ({})".format(self["title"])
+            except:
+                pass
+        return t
+
+class DramaticaCache(object):
+    def __init__(self, tags):
+        self.conn = sqlite3.connect(":memory:")
         self.cur = self.conn.cursor()
-    
-    def query(self, q, *args):
-        self.cur.execute(q,*args)
-
-    def fetchall(self):
-        return self.cur.fetchall()
-
-    def commit(self):
+        self.assets = {}
+        self.tags = tags + [(int, "dramatica/weight")]
+        tformat = ", ".join(["`{}` {}".format(tag, {int:"INTEGER", str:"TEXT", float:"REAL"}[t]) for t, tag in self.tags])
+        self.cur.execute("CREATE TABLE assets (id_object INTEGER PRIMARY KEY, {})".format(tformat))
+        self.cur.execute("CREATE TABLE history (id_channel INTEGER, tstamp INTEGER, id_asset INTEGER)")
         self.conn.commit()
 
-    def rollback(self):
-        self.conn.rollback()
+    def load_assets(self, data_source):
+        self.cur.execute("DELETE FROM assets;")
+        for asset in data_source:
+            id_object = asset["id_object"]
+            self.cur.execute("INSERT INTO assets VALUES (?, {})".format(",".join(["?"]*len(self.tags))), [id_object] + [asset.get(k, None) for t, k in self.tags ])
+            self.assets[id_object] = DramaticaAsset(**asset)
+        self.conn.commit()
+        return len(self.assets)
 
-    def close(self):
-        self.conn.close()
+    def load_history(self, data_source, start=False, stop=False):
+        if not (start or stop):
+            self.cur.execute("DELETE FROM history;")
+        else:
+            conds = []
+            if start:
+                conds.append("tstamp > {}".format(start))
+            if stop:
+                conds.append("tstamp < {}".format(stop))
+            self.cur.execute("DELETE FROM history WHERE {}".format(" AND ".join(conds)))
+        self.conn.commit()
+        i = 0
+        for id_channel, tstamp, id_asset in data_source:
+            self.cur.execute("INSERT INTO history VALUES (?,?,?)", [id_channel, tstamp, id_asset])
+            i+=1
+        self.conn.commit()
+        return i
+
+
+
+
+    def __getitem__(self, key):
+        key = int(key)
+        if key in self.assets:
+            return self.assets[key]
 
     def sanit(self, instr):
         try:
             return str(instr).replace("''","'").replace("'","''").decode("utf-8")
         except:
             return instr.replace("''","'").replace("'","''")
+
+    def filter(self, q):
+        q = self.sanit(q)
+        self.cur.execute("SELECT id_object FROM assets WHERE `dramatica/weight` >= 0 AND {}".format(q))
+        for id_object, in self.cur.fetchall():
+            yield self[id_object]
+
+    def clear_pool_weights(self):
+        self.cur.execute("UPDATE assets SET `dramatica/weight` = 0")
+        self.conn.commit()
+        for id_asset in self.assets:
+            self[id_asset]["dramatica/weight"] = 0
+
+    def set_weight(self, id_asset, value, auto_commit=True):
+        self.cur.execute("UPDATE assets SET `dramatica/weight` = ? WHERE id_object = ?", [value, id_asset])
+        if auto_commit:
+            self.conn.commit()
+        self[id_asset]["dramatica/weight"] = value
+
+    def update_weight(self, id_asset, value, auto_commit=True):
+        self.cur.execute("UPDATE assets SET `dramatica/weight` = `dramatica/weight` + ? WHERE id_object = ?", [value, id_asset])
+        if auto_commit:
+            self.conn.commit()
+        self[id_asset]["dramatica/weight"] += value
     
-    def lastid(self):
-        r = self.cur.lastrowid
-        return r
 
-
-
-
-DEBUG, INFO, WARNING, ERROR, GOOD_NEWS = range(0,5)
-
-class Logging():
-    def __init__(self):
-        self.formats = {
-            DEBUG     : "DEBUG \033[34m {0}\033[0m",
-            INFO      : "INFO {0}",
-            WARNING   : "\033[33mWARNING\033[0m {0}",
-            ERROR     : "\033[31mERROR\033[0m {0}",
-            GOOD_NEWS : "\033[32mGOOD NEWS\033[0m {0}"
-        }
-
-    def _msgtype(self, code):
-        return {
-            DEBUG : "DEBUG",
-            INFO : "INFO",
-            WARNING : "WARNING",
-            ERROR : "ERROR",
-            GOOD_NEWS : "GOOD NEWS"
-        }[code]
-
-    def _typeformat(self, code):
-        return self._msgtype(code)
-
-    def _send(self,msgtype,message):
-        if PLATFORM == "linux":
-            print (self.formats[msgtype].format(message))
+    def run_distance(self, id_asset, tstamp):
+        self.cur.execute("SELECT tstamp FROM history WHERE id_asset = ? ORDER BY ABS(tstamp - ?) ASC", [id_asset, tstamp])
+        res = self.cur.fetchall()
+        if not res:
+            return -1
         else:
-            print ("{0:<10} {1}".format(self._typeformat(msgtype), message))
-             
-    def debug (self,msg): self._send(DEBUG,msg)
-    def info (self,msg): self._send(INFO,msg)
-    def warning (self,msg): self._send(WARNING,msg)
-    def error (self,msg): self._send(ERROR,msg)
-    def goodnews(self,msg): self._send(GOOD_NEWS,msg)
-
-logging = Logging() 
+            return abs(res[0][0] - tstamp)
