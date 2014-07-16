@@ -1,190 +1,341 @@
+from __future__ import print_function
+
 import math
 import random
+import sys
 
 from .timeutils import *
+from .rules import DramaticaRundownRule, DramaticaBlockRule, DramaticaItemRule, get_rules
 
-class DramaticaRule(object):
-    def __init__(self, solver, asset=False):
-        self.solver = solver
-        self.block = solver.block
-        self.asset = asset
+def DEBUG(*args):
+    print (*args)
 
-    def rule(self):
-        pass
+SAFE_OVER = 120
+ASSET_TO_BLOCK_INHERIT = [
+    "title",
+    "description",
+    "promoted"
+    ]
 
-    def post(self):
-        pass
+class DramaticaWeights():
+    def __init__(self, rundown):
+        self.data = {}
+        self.rules = {}
+        self.rule_algs = []
+        self.rundown = rundown
 
-class DramaticaBlockRule(DramaticaRule):
-    pass
+        i = 0
+        for rule in get_rules():
+            self.rule_algs.append(rule)
+            for rule_name in rule.ruleset:
+                self.rules[rule_name] = i
+                i+=1
 
-class DramaticaItemRule(DramaticaRule):
-    pass
+        for asset in self.rundown.cache.assets.values():
+            self.data[asset.id] = [0]*i
+
+    def set_weight(self, id_asset, rule, value):
+        self.data[id_asset][self.rules[rule]] = value
+
+    def get_weight(self, id_asset, rule):
+        return self.data[id_asset][self.rules[rule]]
+
 
 
 class DramaticaSolver(object):
     full_clear = False          # Clear all existing items (including those created by user before solving)
-    rules = []                  # List of solver rules and their weights -  tuple(rule_class, weight)
 
     def __init__(self, block, **kwargs):
-        self.block = block
-        self.args = kwargs
+        self.block   = block
+        self.cache   = block.cache
+        self.assets  = block.cache.assets.values()
+        self.rundown = block.rundown
+        self.kwargs  = kwargs
 
         if self.full_clear:
             block.items = []
         else:
-            _newitems = [item for item in block.items if not (item["dramatica/config"] or item["dramatica/solved"])]
+            _newitems = [item for item in block.items if not (str(item["is_optional"]) == 1 or item["dramatica/config"])]
             block.items = _newitems
 
-        self.create_pool()
+        if not hasattr(self.rundown, "weights"):
+            self.rundown.weights = DramaticaWeights(self.rundown)
+            self.compute_rundown_weights()
+        self.compute_block_weights()
 
+    def compute_rundown_weights(self):    
+        for rule in self.weights.rule_algs:
+            if issubclass(rule, DramaticaRundownRule):
+                r = rule(self)
+                r.clear()
+                r.rule()
 
-    @property
-    def used_ids(self):
-        return [item["id_object"] for item in self.block.items]
-
-    def create_pool(self):        
-        self.block.cache.clear_pool_weights()
-        self.pool_ids = []
-
-        for id_asset in self.block.cache.assets:
-            i = 0
-            tweight = 0
-            for rule_class, weight in self.rules:
-                i+=1
-                if not issubclass(rule_class, DramaticaBlockRule):
-                    continue
-                rule = rule_class(self, self.block.cache[id_asset])
-                lweight = rule.rule()
-                if lweight == -1:
-                    tweight = -1
-                    break
-                tweight += lweight*weight
-
-            if tweight != 0:
-                self.block.cache.set_weight(id_asset, weight, auto_commit=False)
-            if tweight >= 0:
-                self.pool_ids.append(id_asset)
-        self.block.cache.conn.commit()
-
-
-        for rule_class, weight in self.rules:
-            if not issubclass(rule_class, DramaticaBlockRule):
-                continue
-            rule = rule_class(self)
-            rule.post()
-
-
-
-    def get(self, *args, **kwargs):
-        allow_reuse = kwargs.get("allow_reuse", False)
-        order = kwargs.get("order", "`dramatica/weight` DESC")
-        conds = list(args)
-        if not allow_reuse:
-            cond = "id_object NOT IN ({})".format(", ".join([str(i) for i in self.used_ids]))
-            conds.append(cond)
-
-        conds = ["`dramatica/weight` >= 0", "duration > 0"] + conds
-        conds = " AND ".join(conds)
-
-        q = "SELECT id_object FROM assets WHERE {}  ORDER BY {} LIMIT 1".format(conds, order)
-        self.block.cache.cur.execute(q)
-        try:
-            id_asset = self.block.cache.cur.fetchall()[0][0]
-        except:
-            return False
-
-        return self.block.cache[id_asset]
+    def compute_block_weights(self):
+        for rule in self.weights.rule_algs:
+            if issubclass(rule, DramaticaBlockRule):
+                r = rule(self)
+                r.clear()
+                r.rule()
 
     def solve(self):
         pass
 
+    @property 
+    def weights(self):
+        return self.rundown.weights
 
-## Solver core
-########################################################################3
-## TESTING MODS
+    @property
+    def used_ids(self):
+        return [item.id for item in self.block.items]
 
-class GenreRule(DramaticaBlockRule):
-    def rule(self):
-        genres = self.block.config.get("genres",[])
-        if self.asset["genre/music"] in genres or self.asset["genre/movie"] in genres:
-            return 1
-        return 0
+    @property
+    def veto(self):
+        return [i for i in self.weights.data if -1 in self.weights.data[i] ]
 
-class PromotedRule(DramaticaBlockRule):
-    def rule(self):
-        return int( self.asset["promoted"] )
+    def get_weight(self, *args):
+        return self.weights.get_weight(*args)
 
-class DistanceRule(DramaticaBlockRule):
-    def rule(self):
-        dist = self.block.cache.run_distance(self.asset.id, self.block.scheduled_start)
-        self.asset["dramatica/run_distance"] = dist
-        return 0
 
-    def post(self):
-        dist_median = sorted(self.solver.pool_ids, key=lambda id_asset: self.block.cache[id_asset]["dramatica/run_distance"])[int(math.floor(len(self.solver.pool_ids)/2))]
-        for id_asset in self.solver.pool_ids:
-            rdist = self.block.cache[id_asset]["dramatica/run_distance"]
-            if rdist == -1:
-                w = 2
-            elif rdist > dist_median:
-                w = 1
+    def get(self, *args, **kwargs):
+        allow_reuse = kwargs.get("allow_reuse", False)
+        ordering = kwargs.get("order", [])
+        best_fit = kwargs.get("best_fit", False)
+        debug    = kwargs.get("debug", False)
+
+        if debug:
+            DEBUG("************************************************************************")
+            DEBUG("Getting asset", len(self.block.items) ," for block", self.block["title"])
+
+        veto = self.veto
+        if not allow_reuse:
+            veto = set(veto + self.used_ids)
+
+        if debug:
+            DEBUG("VETO:")
+            for id_asset in veto:
+                asset = self.cache[id_asset]
+                DEBUG (" - ", asset, asset["dramatica/veto_reason"] or "Used in block")
+
+        conds = list(args)
+        conds.append("id_object NOT IN ({})".format(", ".join([str(i) for i in veto])))
+        conds = " AND ".join(conds)
+
+        query = "SELECT id_object FROM assets WHERE {}".format(conds)
+        result = self.block.cache.query(query, one_column=True)
+
+        if not result:
+            return False
+
+        if debug:
+            DEBUG("MATCHING",len(result)," assets:")
+            for id_asset in result:
+                asset = self.cache[id_asset]
+                DEBUG (" - ", asset)
+
+        if not ordering:
+            ordering = [
+                "weight.genre",
+                "weight.distance",
+                "weight.repetition",
+                "weight.rundown_repeat",
+                "weight.promoted"
+                ]
+
+        for definition in ordering:
+            c = int(len(result)/2)+1
+            if len(result) == 1:
+                break
+            
+            if definition == "weights":
+                result = sorted(result, key=lambda id_asset: sum(self.weights.data[id_asset]), reverse=True)[:c]
+                continue
+
+            definition = definition.split(".")
+
+            if len(definition) < 2:
+                continue
+            
+            if len(definition) > 2 and definition[2] == "asc":
+                desc = False
             else:
-                w = 0  
-            self.block.cache.update_weight(id_asset, w, auto_commit=False)
-        self.block.cache.conn.commit()
+                desc = True
 
-class BlockRepeatRule(DramaticaItemRule):
-    def rule(self):
-        if self.asset.id in [a.id for a in self.block.items]:
-            return 0
-        return 1
+            if definition[0] == "weight":
+                result = sorted(result, key=lambda id_asset: self.get_weight(id_asset, definition[1]), reverse=desc)
+                if debug:
+                    DEBUG("")
+                    DEBUG("refined result using", definition)
+                    for id_asset in result[:c]:
+                        DEBUG (" --- ", 
+                            "{:<90}".format(self.cache[id_asset]),  
+                            "{:<10}".format(self.get_weight(id_asset, definition[1])), 
+                            "({} runs)".format(len(self.cache[id_asset]["dramatica/runs"])),
+                            "{:.02f} hours ago".format(abs(self.block.scheduled_start - self.cache[id_asset]["dramatica/runs"][0])/3600) if self.cache[id_asset]["dramatica/runs"] else "",
+                            )
+                    DEBUG("discarted result", definition)
+                    for id_asset in result[c:]:
+                        DEBUG (" --- --- ", 
+                            "\033[31m",
+                            "{:<85}".format(self.cache[id_asset]),  
+                            "{:<10}".format(self.get_weight(id_asset, definition[1])), 
+                            "({} runs)".format(len(self.cache[id_asset]["dramatica/runs"])),
+                            "{:.02f} hours ago".format(abs(self.block.scheduled_start - self.cache[id_asset]["dramatica/runs"][0])/3600) if self.cache[id_asset]["dramatica/runs"] else "",
+                            "\033[0m"
+                            )
 
+                result = result[:c]
+                    
+            elif definition[0] == "meta":
+                result = sorted(result, key=lambda id_asset: self.cache[id_asset][definition[1]], reverse=desc)[:c]
+                if debug:
+                    DEBUG(
+                        "\nrefined result using", definition)
+                    for id_asset in result:
+                        DEBUG (" --- ", self.cache[id_asset],  self.cache[id_asset][definition[1]])
+
+
+
+
+        if best_fit:
+            result = sorted(result, key=lambda id_asset: abs(best_fit - self.cache[id_asset].duration))[:1]
+    
+        try:
+            id_asset = result[0] if len(result) == 1 else random.choice(result)
+        except:
+            DEBUG( "ERR:", result )
+            sys.exit(0)
+
+        asset =  self.block.cache[id_asset]
+
+        if debug:
+            DEBUG("\n\033[32mRETURNING\033[0m", asset, "\n\n")
+            sys.exit(0)
+
+        return asset
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+######################################################################################
 
 
 class DefaultSolver(DramaticaSolver):
-    rules = [
-        [GenreRule, 2],
-        [PromotedRule, 1],
-        [DistanceRule, 1]
-        ]
+
+    block_source = "id_folder IN (1, 2)"
+    fill_source =  "id_folder IN (3,5,7,8)"
+    post_main = "path like '%program_%'"
+    
+    def solve_empty(self):
+        for id_asset in sorted(self.block.cache.assets, key=lambda x: self.block.cache.assets[x]["dramatica/weight"]):
+            if not self.block.cache[id_asset]:
+                continue
+  
+        asset = self.get(
+            self.block_source,
+            order=[
+                "weight.genre",
+                "weight.distance", 
+                "weight.repetition", 
+                "meta.io_duration",
+                "weight.promoted",
+                ]
+            )
+        self.block.add(asset, is_optional=0, id_asset=asset.id)
+        for key in ASSET_TO_BLOCK_INHERIT:
+            if asset[key]:
+                self.block[key] = asset[key]
+        if self.post_main:
+            p = self.get(self.post_main)
+            if p:
+                self.block.add(p)
+
+
+    def insert_block(self, asset, start):
+        n = self.block.rundown.insert(
+                self.block.block_order+1, 
+                start=start,
+                id_asset = asset.id,
+                is_optional = 0,
+            )
+        n.add(asset)
+        for key in ASSET_TO_BLOCK_INHERIT:
+            if asset[key]:
+                n[key] = asset[key]
+
+        if self.post_main:
+            p = self.get(self.post_main)
+            if p:
+                n.add(p)        
+
+        jingles = self.block.config.get("jingles", False)
+        if jingles:
+            n.config["jingles"] = jingles
+
 
     def solve(self):
+        if not self.block.items:
+            self.solve_empty()
+
         suggested = suggested_duration(self.block.duration)
-        print suggested
+        jingles = self.block.config.get("jingles", False)
+
+        ##########################################
+        ## If remaining time is long, split block
 
         if self.block.remaining > (suggested - self.block.duration):
-
             asset = self.get(
-                    "duration < {}".format(self.block.target_duration - suggested),  #FIX MARK IN AND OUT
-                    "duration > {}".format(suggested-self.block.duration),
-                    "`dramatica/weight` > 0",
-                    order="duration DESC"
+                    self.block_source,
+                    "io_duration < {}".format(self.block.target_duration - suggested),
+                    order=[
+                        "weight.distance", 
+                        "weight.repetition", 
+                        "meta.io_duration",
+                        "weight.genre",
+                        "weight.promoted",
+                        ],
+                #    debug=True
                 ) 
 
             if asset:
-                print asset, "to ", self.block["title"]
-                n = self.block.rundown.insert(
-                        self.block.block_order+1, 
-                        start=self.block["start"] +  suggested,
-                        title=asset["title"],
-                        description=asset["description"]
-                    )
-                n.add(asset)
+                self.insert_block(asset, start=self.block["start"]+suggested)
 
+        ## If remaining time is long, split block
+        ##########################################
 
         while self.block.remaining > 0:
-
-            asset = self.get(order="ABS({} - duration )".format(self.block.remaining)) # FIX MARK IN AND OUT
+            asset = self.get(self.fill_source, order=["weight.genre", "weight.rundown_repeat"], best_fit=self.block.remaining)
             if self.block.remaining - asset.duration < 0:
                 self.block.add(asset)
                 break
 
-            asset = self.get("id_folder = 1") ### MOOD/BPM SELECTOR GOES HERE
+            asset = self.get(
+                self.fill_source, 
+                "io_duration < {}".format(self.block.remaining + SAFE_OVER),
+                order=["weight.genre", "weight.rundown_repeat"]
+                ) ### Fillers
+            
             self.block.add(asset)
 
-            print (self.block.remaining, asset, asset.duration)
-
+            if jingles:
+                jingle = self.get(jingles, allow_reuse=True)
+                if jingle:
+                    self.block.add(jingle)
 
 
 
@@ -192,41 +343,55 @@ class DefaultSolver(DramaticaSolver):
 
 class MusicBlockSolver(DramaticaSolver):
     full_clear = True
-    rules = [
-        [GenreRule, 2],
-        [PromotedRule, 1],
-        [DistanceRule, 1]
-    ]
+    rules = []
 
     def solve(self):
-        jingle_span = 600
-        promo_span = 1000
-        
         last_jingle = 0
         last_promo  = 0
 
         jingle_selector = self.block.config.get("jingles", False)
+        intro_jingle    = self.block.config.get("intro_jingle", False)
+        outro_jingle    = self.block.config.get("outro_jingle", False)
+        jingle_span     = self.block.config.get("jingle_span",600)
+        promo_span      = self.block.config.get("promo_span",1000)
+        song_source     = self.block.config.get("song_source", "id_folder = 5")
 
-        intro_jingle = self.block.config.get("intro_jingle", False)
         if intro_jingle:
             self.block.add(self.get(intro_jingle, allow_reuse=True))
 
+        bpm_median = self.rundown.cache.query("SELECT `audio/bpm` FROM assets WHERE `audio/bpm` NOT NULL ORDER BY `audio/bpm` LIMIT 1 OFFSET (SELECT COUNT(*) FROM assets WHERE `audio/bpm` NOT NULL) / 2")[0][0]
+        bpm_mod = True
+
         while self.block.remaining > 0:
+            # PROMOS #
+            ##########
             if self.block.remaining > promo_span and self.block.duration - last_promo > promo_span:
                 pass #TODO
 
+            # JINGLES #
+            ###########
             if jingle_selector and self.block.remaining > jingle_span and self.block.duration - last_jingle > jingle_span:
-                self.block.add(self.get(jingle_selector, allow_reuse=True))
+                jingle = self.get(jingle_selector, allow_reuse=True)
+                if jingle:
+                    self.block.add(jingle)
                 last_jingle = self.block.duration
 
-            asset = self.get("id_folder = 1", order="ABS({} - duration )".format(self.block.remaining)) # FIX MARK IN AND OUT
+            # FINAL SONG #
+            ##############
+            asset = self.get(song_source, best_fit=self.block.remaining)
             if self.block.remaining - asset.duration < 0:
                 self.block.add(asset)
                 break
 
-            asset = self.get("id_folder = 1") ### MOOD/BPM SELECTOR GOES HERE
+            # DEFAULT SONG #
+            ################
+            bpm_mod = not bpm_mod
+            if bpm_mod:
+                bpm_cond = "`audio/bpm` < {}".format(bpm_median)
+            else:
+                bpm_cond = "`audio/bpm` > {}".format(bpm_median)
+            asset = self.get(song_source, bpm_cond)
             self.block.add(asset)
 
-        outro_jingle = self.block.config.get("outro_jingle", False)
         if outro_jingle:
             self.block.add(self.get(outro_jingle, allow_reuse=True))

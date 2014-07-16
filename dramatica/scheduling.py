@@ -16,7 +16,6 @@ class DramaticaBlock(DramaticaObject):
         self.cache = rundown.cache
         self.items = []
         self.config = {} # solver settings (event "dramatica/config" meta)
-        self.solved = False
 
     @property
     def block_order(self):
@@ -54,7 +53,8 @@ class DramaticaBlock(DramaticaObject):
     def broadcast_start(self):
         if self.block_order == 0:
             return self.scheduled_start
-            #return self.rundown.day_start
+        elif self["run_mode"]:
+            return self.scheduled_start
         return self.rundown.blocks[self.block_order-1].broadcast_end
 
     @property 
@@ -92,13 +92,6 @@ class DramaticaBlock(DramaticaObject):
         solver.solve()
 
         self.solved = True
-
-
-
-
-
-
-
 
 
 
@@ -146,6 +139,15 @@ class DramaticaRundown(DramaticaObject):
         self.blocks.insert(index, DramaticaBlock(self, **kwargs))
         return self.blocks[index]
 
+    def has_asset(self, id_asset):
+        result = []
+        t = self.day_start
+        for block in self.blocks:
+            for item in block.items:
+                if item.id == id_asset:
+                    result.append(t)
+                t+= item.duration
+        return result
 
     def solve(self):
         i = 0

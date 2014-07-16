@@ -1,5 +1,13 @@
 import sqlite3
 
+
+def io_dur(dur, mki, mko):
+    if not dur: return 0
+    if mko > 0: dur -= dur - mko
+    if mki > 0: dur -= mki
+    return dur
+
+
 class DramaticaObject(object):
     default = {
         "title" : "Unnamed object"
@@ -18,6 +26,10 @@ class DramaticaObject(object):
 
 
 class DramaticaAsset(DramaticaObject):
+    default = {
+        "is_optional" : 1
+    }
+
     def __init__(self, **kwargs):
         super(DramaticaAsset, self).__init__(**kwargs)
         self.veto = False
@@ -51,7 +63,10 @@ class DramaticaCache(object):
         self.conn = sqlite3.connect(":memory:")
         self.cur = self.conn.cursor()
         self.assets = {}
-        self.tags = tags + [(int, "dramatica/weight")]
+        self.tags = tags + [
+            (int, "dramatica/weight"),
+            (float, "io_duration")
+            ]
         tformat = ", ".join(["`{}` {}".format(tag, {int:"INTEGER", str:"TEXT", float:"REAL"}[t]) for t, tag in self.tags])
         self.cur.execute("CREATE TABLE assets (id_object INTEGER PRIMARY KEY, {})".format(tformat))
         self.cur.execute("CREATE TABLE history (id_channel INTEGER, tstamp INTEGER, id_asset INTEGER)")
@@ -61,6 +76,7 @@ class DramaticaCache(object):
         self.cur.execute("DELETE FROM assets;")
         for asset in data_source:
             id_object = asset["id_object"]
+            asset["io_duration"] = io_dur(asset.get("duration",0), asset.get("mark_in", 0), asset.get("mark_out", 0))
             self.cur.execute("INSERT INTO assets VALUES (?, {})".format(",".join(["?"]*len(self.tags))), [id_object] + [asset.get(k, None) for t, k in self.tags ])
             self.assets[id_object] = DramaticaAsset(**asset)
         self.conn.commit()
@@ -83,10 +99,7 @@ class DramaticaCache(object):
             i+=1
         self.conn.commit()
         return i
-
-
-
-
+        
     def __getitem__(self, key):
         key = int(key)
         if key in self.assets:
@@ -98,35 +111,9 @@ class DramaticaCache(object):
         except:
             return instr.replace("''","'").replace("'","''")
 
-    def filter(self, q):
-        q = self.sanit(q)
-        self.cur.execute("SELECT id_object FROM assets WHERE `dramatica/weight` >= 0 AND {}".format(q))
-        for id_object, in self.cur.fetchall():
-            yield self[id_object]
-
-    def clear_pool_weights(self):
-        self.cur.execute("UPDATE assets SET `dramatica/weight` = 0")
-        self.conn.commit()
-        for id_asset in self.assets:
-            self[id_asset]["dramatica/weight"] = 0
-
-    def set_weight(self, id_asset, value, auto_commit=True):
-        self.cur.execute("UPDATE assets SET `dramatica/weight` = ? WHERE id_object = ?", [value, id_asset])
-        if auto_commit:
-            self.conn.commit()
-        self[id_asset]["dramatica/weight"] = value
-
-    def update_weight(self, id_asset, value, auto_commit=True):
-        self.cur.execute("UPDATE assets SET `dramatica/weight` = `dramatica/weight` + ? WHERE id_object = ?", [value, id_asset])
-        if auto_commit:
-            self.conn.commit()
-        self[id_asset]["dramatica/weight"] += value
-    
-
-    def run_distance(self, id_asset, tstamp):
-        self.cur.execute("SELECT tstamp FROM history WHERE id_asset = ? ORDER BY ABS(tstamp - ?) ASC", [id_asset, tstamp])
-        res = self.cur.fetchall()
-        if not res:
-            return -1
+    def query(self, *args, **kwargs):
+        self.cur.execute(*args)
+        if kwargs.get("one_column", False):
+            return [i[0] for i in self.cur.fetchall()]
         else:
-            return abs(res[0][0] - tstamp)
+            return self.cur.fetchall()
