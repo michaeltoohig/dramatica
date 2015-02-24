@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import random
+import copy
 
 from .common import DramaticaObject, DramaticaAsset
 from .timeutils import *
@@ -16,6 +17,13 @@ class DramaticaBlock(DramaticaObject):
         self.cache = rundown.cache
         self.items = []
         self.config = {} # solver settings (event "dramatica/config" meta)
+
+
+    def __repr__(self):
+        try:
+            return "block{}".format(" {}".format(self["title"]) if self["title"] else "" )
+        except:
+            return "block with fucked up encoding" # HA HA HA
 
     @property
     def block_order(self):
@@ -68,28 +76,45 @@ class DramaticaBlock(DramaticaObject):
         if not item:
             return
         elif type(item) == int and item in self.cache.assets:
-            self.items.append(self.cache[item])
+            self.items.append(copy.deepcopy(self.cache[item]))
         elif type(item) == DramaticaAsset:
-            self.items.append(item)
+            self.items.append(copy.deepcopy(item))
         else:
             return
         self.items[-1].meta.update(kwargs)
+        return self.items[-1]
+
+    def insert(self, index, item, **kwargs):
+        if not item:
+            return
+        elif type(item) == int and item in self.cache.assets:
+            self.items.insert(index, copy.deepcopy(self.cache[item]))
+        elif type(item) == DramaticaAsset:
+            self.items.insert(index, copy.deepcopy(item))
+        else:
+            return
+        self.items[index].meta.update(kwargs)
+        return self.items[index]
+
+
 
     def solve(self):
-        #TODO: Loading solvers
-        from .solving import DefaultSolver, MusicBlockSolver
-        if self.config.get("solver", False) == "MusicBlock":
-            solver_class = MusicBlockSolver
+        yield "Loading solvers"
+        from .solving import solvers
+        solver_class = False
+
+        solver_name = self.config.get("solver", False)
+        
+        if solver_name in solvers:
+            solver_class = solvers[solver_name]
         else:
-            solver_class = DefaultSolver
+            solver_class = solvers["Default"]
 
-        self.config["genres"] = self.config.get("genres", []) or []
-        self.config["genres"].extend([item["genre/music"] for item in self.items if item["genre/music"] ])
-        self.config["genres"].extend([item["genre/movie"] for item in self.items if item["genre/movie"] ])
-        self.config["genres"] = list(set(self.config["genres"]))
-
-        solver = solver_class(self)
-        solver.solve()
+        if solver_class:
+            yield "Initialising solver {}".format(solver_name or "")
+            solver = solver_class(self)
+            for msg in solver.solve():
+                yield msg
 
         self.solved = True
 
@@ -149,16 +174,22 @@ class DramaticaRundown(DramaticaObject):
                 t+= item.duration
         return result
 
-    def solve(self):
+    def solve(self, id_event=False):
         i = 0
         while True:
             try:
                 block = self.blocks[i]
             except IndexError:
                 break
-            block.solve()            
             i+=1
 
+            if id_event and block["id_event"] and id_event != block["id_event"]:
+                yield "Skipping {}".format(block)
+                continue
+
+            for msg in block.solve():
+                yield msg
+            
 
     def __str__(self):
         output = u"\n"
@@ -176,6 +207,5 @@ class DramaticaRundown(DramaticaObject):
                         unicode(item["title"])
                     )
             output += u"\n\n"
-
-
+            
         return output

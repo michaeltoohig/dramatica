@@ -1,5 +1,5 @@
 import sqlite3
-
+import sys
 
 def io_dur(dur, mki, mko):
     if not dur: return 0
@@ -24,12 +24,15 @@ class DramaticaObject(object):
     def __setitem__(self, key, value):
         self.meta[key] = value
 
+    def __delitem__(self, key):
+        if key in self.meta:
+            del (self.meta[key])
+
 
 class DramaticaAsset(DramaticaObject):
     default = {
-        "is_optional" : 1
+        "is_optional" : "1"
     }
-
     def __init__(self, **kwargs):
         super(DramaticaAsset, self).__init__(**kwargs)
         self.veto = False
@@ -74,13 +77,15 @@ class DramaticaCache(object):
 
     def load_assets(self, data_source):
         self.cur.execute("DELETE FROM assets;")
-        for asset in data_source:
+        for i, asset in enumerate(data_source):
             id_object = asset["id_object"]
             asset["io_duration"] = io_dur(asset.get("duration",0), asset.get("mark_in", 0), asset.get("mark_out", 0))
             self.cur.execute("INSERT INTO assets VALUES (?, {})".format(",".join(["?"]*len(self.tags))), [id_object] + [asset.get(k, None) for t, k in self.tags ])
             self.assets[id_object] = DramaticaAsset(**asset)
+            if i % 50 == 0:
+                yield "Loading assets"
         self.conn.commit()
-        return len(self.assets)
+        
 
     def load_history(self, data_source, start=False, stop=False):
         if not (start or stop):
@@ -97,8 +102,9 @@ class DramaticaCache(object):
         for id_channel, tstamp, id_asset in data_source:
             self.cur.execute("INSERT INTO history VALUES (?,?,?)", [id_channel, tstamp, id_asset])
             i+=1
+            if i % 20 == 0:
+                yield "Loading history"
         self.conn.commit()
-        return i
         
     def __getitem__(self, key):
         key = int(key)
@@ -112,7 +118,12 @@ class DramaticaCache(object):
             return instr.replace("''","'").replace("'","''")
 
     def query(self, *args, **kwargs):
-        self.cur.execute(*args)
+        try:
+            self.cur.execute(*args)
+        except:
+            print(args)
+            print(sys.exc_info())
+            raise Exception
         if kwargs.get("one_column", False):
             return [i[0] for i in self.cur.fetchall()]
         else:
