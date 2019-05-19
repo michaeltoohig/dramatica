@@ -25,6 +25,7 @@ class Logger():
 logger = Logger()
 
 def log(*args):
+    print(*args)
     logger.write(*args)
 
 
@@ -189,8 +190,8 @@ class DramaticaSolver(object):
 
             if DEBUG:
                 log("\nRUNNING PASS", passes)
-
             for definition in ordering:
+                #print(definition)
                 if len(result) == 1:
                     break
                 c = int(len(result)/2)
@@ -208,10 +209,11 @@ class DramaticaSolver(object):
                     desc = False
                 else:
                     desc = True
-
+                #print('--')
                 if definition[0] == "weight":
+                    #print('++')
                     result = sorted(result, key=lambda id_asset: (self.get_weight(id_asset, definition[1]),  random.random()) , reverse=desc)
-
+                    #print(result)
                     if len(set([self.get_weight(id_asset, definition[1]) for id_asset in result ])) == 1:
                         if passes > 2:
                             result = [random.choice(result)]
@@ -221,16 +223,18 @@ class DramaticaSolver(object):
                     if DEBUG:
                         log("\nrefined result using", definition)
                         for id_asset in result[:c]:
+                            print(id_asset)
                             log (" + ", 
-                                "{:<90}".format(self.cache[id_asset]),  
+                                "{:<90}".format(str(self.cache[id_asset])),  
                                 "{:<10}".format(self.get_weight(id_asset, definition[1])), 
                                 "({} runs)".format(len(self.cache[id_asset]["dramatica/runs"])),
                                 "{:.02f} hours ago".format(abs(self.block.scheduled_start - self.cache[id_asset]["dramatica/runs"][0])/3600) if self.cache[id_asset]["dramatica/runs"] else "",
                                 )
                         log("discarted result", definition)
                         for id_asset in result[c:]:
+                            print(id_asset, type(id_asset))
                             log (" - ", 
-                                "{:<85}".format(self.cache[id_asset]),  
+                                "{:<85}".format(str(self.cache[id_asset])),  
                                 "{:<10}".format(self.get_weight(id_asset, definition[1])), 
                                 "({} runs)".format(len(self.cache[id_asset]["dramatica/runs"])),
                                 "{:.02f} hours ago".format(abs(self.block.scheduled_start - self.cache[id_asset]["dramatica/runs"][0])/3600) if self.cache[id_asset]["dramatica/runs"] else "",
@@ -243,13 +247,12 @@ class DramaticaSolver(object):
                         log("\nrefined result using", definition)
                         for id_asset in result:
                             log (" +++ ", self.cache[id_asset],  self.cache[id_asset][definition[1]])
-
+                
                 if best_fit:
                     result = sorted(result, key=lambda id_asset: abs(best_fit - self.cache[id_asset].duration))[:1]
 
-
         id_asset = result[0]
-        asset =  self.block.cache[id_asset]
+        asset = self.block.cache[id_asset]
 
         if DEBUG:
             log("\nRETURNING", asset, "in",passes,"passes\n\n")
@@ -306,6 +309,8 @@ class DefaultSolver(DramaticaSolver):
                 elif self.block[key]:
                     del (self.block[key])
 
+        return 'd'
+
 
     def insert_block(self, asset, start):
         n = self.block.rundown.insert(
@@ -326,6 +331,8 @@ class DefaultSolver(DramaticaSolver):
             if self.block.config.get(v, False):
                 n.config[v] = self.block.config[v]
 
+        return 'd'
+
 
     def insert_post_main(self):
         """
@@ -342,16 +349,19 @@ class DefaultSolver(DramaticaSolver):
         for definition in post_main:
             asset = self.get(definition)
             if asset:
-                self.block.add(asset)        
+                self.block.add(asset)
+
+        return 'd'
 
 
     def solve(self):
-        yield "Solving {}".format(self.block)
+        print("Solving {}".format(self.block))
+        #import pdb; pdb.set_trace()
         if not self.block.items:
             if self.block.config.get("solve_empty", False):
                 self.solve_empty()
-            else:
-                return
+            #else:
+            #    return 'r'
 
 
         suggested   = suggested_duration(self.block.duration)
@@ -382,7 +392,7 @@ class DefaultSolver(DramaticaSolver):
                 ) 
 
             if asset:
-                yield "Splitting block using {}".format(asset)
+                print("Splitting block using {}".format(asset))
                 self.insert_block(asset, start=self.block["start"] + suggested)
 
         ## If remaining time is long, split block
@@ -402,7 +412,7 @@ class DefaultSolver(DramaticaSolver):
             if not asset:
                 break
 
-            yield "Appending {}".format(asset)
+            print("Appending {}".format(asset))
             self.block.add(asset)
 
             if jingles and self.block.remaining > jingle_span and self.block.duration - last_jingle > jingle_span:
@@ -411,6 +421,7 @@ class DefaultSolver(DramaticaSolver):
                     self.block.add(jingle)
                 last_jingle = self.block.duration
 
+        return 'Done'
 
 
 
@@ -420,7 +431,7 @@ class MusicBlockSolver(DramaticaSolver):
     rules = []
 
     def solve(self):
-        yield "Solving {}".format(self.block)
+        print("Solving {}".format(self.block))
         last_jingle = 0
         last_promo  = 0
 
@@ -472,13 +483,74 @@ class MusicBlockSolver(DramaticaSolver):
                 bpm_cond = "`audio/bpm` >= {} OR `audio/bpm` IS NULL".format(bpm_median)
             asset = self.get(song_source, bpm_cond)
             if asset:
-                yield "Appending {}".format(asset)
+                print("Appending {}".format(asset))
                 self.block.add(asset)
 
         if outro_jingle:
             self.block.add(self.get(outro_jingle, allow_reuse=True))
+        
+        return 'Done'
+
+
+
+class MovieSolver(DramaticaSolver):
+    
+    def insert_pre_main(self):
+        """
+        Inserts clips which should run right before "main" asset.
+        Promos, coming up graphics etc...
+        """
+        pre_main = self.block.config.get("pre_main", False)
+        if not pre_main:
+            return
+
+        elif type(pre_main) != list:
+            pre_main = list(pre_main)
+
+        for definition in pre_main:
+            asset - self.get(definition)
+            if asset:
+                self.block.add(asset)
+
+        return
+    
+    def solve(self):
+        print("Solving {}".format(self.block))
+        
+        movie_source = self.block.config.get("movie_source", "id_folder IN (1)")
+        fill_source = self.block.config.get("fill_source", "id_folder IN (5, 7)")
+        
+        self.insert_pre_main()
+
+        # DEFAULT MOVIE #
+        #################
+        asset = self.get(movie_source)
+        if asset:
+            print("Appending {}".format(asset))
+            self.block.add(asset)
+
+        while self.block.remaining > 0:
+            asset = self.get(fill_source, best_fit=self.block.remaining)
+            if asset and self.block.remaining - asset.duration < 0:
+                self.block.add(asset)
+                break
+            
+            asset = self.get(
+                fill_source,
+                "io_duration < {}".format(self.block.remaining + SAFE_OVER),
+            )  ## Fillers
+
+            if not asset:
+                break
+
+            print("Appending {}".format(asset))
+            self.block.add(asset)
+
+        return 
+
 
 solvers = {
+    "MovieBlock" : MovieSolver,
     "MusicBlock" : MusicBlockSolver,
     "Default" : DefaultSolver
     }

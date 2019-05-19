@@ -38,14 +38,16 @@ class Template(DramaticaTemplate):
         self.configure(
             solver="MusicBlock", 
             genres=["Pop", "Rock", "Alt rock"],
-            target_duration=dur("01:00:00"),
+            target_duration=dur("04:00:00"),
             run_mode=2
             )
 
         self.add_block("10:00", title="Some movie")
         self.configure(
             solver="DefaultSolver",
-            run_mode=2
+            run_mode=2,
+            target_duration=dur("02:00:00"),
+            genres=["movie"],
             )   
 
         self.add_block("12:00", title="Rocking")

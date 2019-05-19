@@ -99,7 +99,7 @@ class DramaticaBlock(DramaticaObject):
 
 
     def solve(self):
-        yield "Loading solvers"
+        print("Loading solvers")
         from .solving import solvers
         solver_class = False
 
@@ -111,9 +111,10 @@ class DramaticaBlock(DramaticaObject):
             solver_class = solvers["Default"]
 
         if solver_class:
-            yield "Initialising solver {}".format(solver_name or "")
+            print("Initialising solver {}".format(solver_name or ""))
             solver = solver_class(self)
             for msg in solver.solve():
+                #next(msg)
                 yield msg
 
         self.solved = True
@@ -179,33 +180,39 @@ class DramaticaRundown(DramaticaObject):
         while True:
             try:
                 block = self.blocks[i]
+                print(block)
             except IndexError:
                 break
-            i+=1
+            i += 1
 
             if id_event and block["id_event"] and id_event != block["id_event"]:
-                yield "Skipping {}".format(block)
+                print("Skipping {}".format(block))
                 continue
 
             for msg in block.solve():
-                yield msg
+                print(msg)
             
 
     def __str__(self):
-        output = u"\n"
+        output = "\n"
         for block in self.blocks:
-            output += u"{}  {}   {}\n".format(
-                unicode(time.strftime("%H:%M", time.localtime(block.scheduled_start))),
-                unicode(time.strftime("%H:%M", time.localtime(block.broadcast_start))),
+            output += "{}  {}   {}\n".format(
+                time.strftime("%H:%M", time.localtime(block.scheduled_start)),
+                time.strftime("%H:%M", time.localtime(block.broadcast_start)),
                 block["title"]
                 )
-            output += u"-"*64 + "\n"
+            output += "-"*64 + "\n"
 
+            total_duration = 0
             for item in block.items:
-                output+=u"             {} {}\n".format(
-                        u" " if item["dramatica/auto"] else u"*",
-                        unicode(item["title"])
+                output+="{}  {}   {} {} {}\n".format(
+                        time.strftime("%H:%M", time.localtime(block.broadcast_start + total_duration)),
+                        time.strftime("%H:%M", time.localtime(block.broadcast_start + total_duration + item.duration)),
+                        " " if item["dramatica/auto"] else "*",
+                        item["title"],
+                        item["path"],
                     )
-            output += u"\n\n"
+                total_duration += item.duration
+            output += "\n\n"
             
         return output

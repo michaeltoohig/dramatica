@@ -83,10 +83,9 @@ class DramaticaCache(object):
             self.cur.execute("INSERT INTO assets VALUES (?, {})".format(",".join(["?"]*len(self.tags))), [id_object] + [asset.get(k, None) for t, k in self.tags ])
             self.assets[id_object] = DramaticaAsset(**asset)
             if i % 50 == 0:
-                yield "Loading assets"
+                print("Loading assets")
         self.conn.commit()
         
-
     def load_history(self, data_source, start=False, stop=False):
         if not (start or stop):
             self.cur.execute("DELETE FROM history;")

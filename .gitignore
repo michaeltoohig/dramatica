@@ -1,4 +1,9 @@
+dramatica.log
+
 *.py[cod]
+.venv/
+.venv2/
+data/
 
 # C extensions
 *.so
