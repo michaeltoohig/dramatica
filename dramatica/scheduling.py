@@ -85,6 +85,7 @@ class DramaticaBlock(DramaticaObject):
         return self.items[-1]
 
     def insert(self, index, item, **kwargs):
+        # TODO use this to add custom blocks when block runs short?
         if not item:
             return
         elif type(item) == int and item in self.cache.assets:

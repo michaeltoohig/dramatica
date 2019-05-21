@@ -47,9 +47,11 @@ def get_template(tpl_name):
 
 
 def demo_assets():
+    count = 1
     assets = []
     # build assets
     for i in list(range(200)):
+        count += 1
         if i % 10 == 0:
             path="data/postx_short/{}.webm".format(random.randint(1,4))
             #path=f"data/postx_short/{random.randint(1, 4)}.webm",
@@ -60,7 +62,6 @@ def demo_assets():
         a = dict(
             title=i,
             description="description",
-            #description=f"{i} description.",
             genre=random.choice([
                 "horror",
                 "political",
@@ -85,6 +86,7 @@ def demo_assets():
 
     # movies
     for i in list(range(10)):
+        count += 1
         a = dict(
             title=i,
             description="description",
@@ -93,23 +95,60 @@ def demo_assets():
             path="data/movies/{}.webm".format(i),
             duration=random.randint(3600, 7200),
             id_folder=1,
-            id_object=i + 200,
+            id_object=count,
         ) 
         assets.append(a)
 
     # fillers
     for i in list(range(100)):
+        count += 1
         a = dict(
-            title="Filler {}".format(i),
+            title="Music {}".format(i),
             description="description",
             genre="filler",
             source="source",
             path="data/filler/{}.webm".format(i),
             duration=random.randint(30, 500),
             id_folder=20,
-            id_object=i + 210,
+            id_object=count,
         ) 
         assets.append(a)
+
+    # music
+    for i in list(range(100)):
+        count += 1
+        genre = random.choice([
+            "rock",
+            "hiphop",
+            "local",
+            "zouk",
+        ])
+        a = dict(
+            title="Music {}".format(i),
+            description="description",
+            genre=genre,
+            source="source",
+            path=f"data/{genre}/{i}.webm",
+            duration=random.randint(120, 300),
+            id_folder=22,
+            id_object=count,
+        ) 
+        assets.append(a)
+
+    # commercial
+    for i in list(range(10)):
+        count += 1
+        a = dict(
+            title=f"comm_{i}",
+            description="description",
+            source="source",
+            path=f"data/commercial/{i}.webm",
+            duration=random.randint(28, 32),
+            id_folder=25,
+            id_object=count
+        )
+        assets.append(a)
+
     return assets
 
     #a1 = DramaticaAsset(title="1", description="1 video", genre="Music", source="online", path="data/1.webm", duration=10, mark_in=2, mark_out=8, id_object=1)

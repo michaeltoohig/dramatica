@@ -126,6 +126,29 @@ class DramaticaSolver(object):
     def get_weight(self, *args):
         return self.weights.get_weight(*args)
 
+    def insert_commercial_block(self, asset, start):
+        # TODO continue understanding and modifying this.
+        # move back into movie block or keep this generic in this class?
+        n = self.block.rundown.insert(
+                self.block.block_order+1, 
+                start=start,
+                id_asset = asset.id,
+                is_optional = 0,
+            )
+        n.config["solve_empty"] = True
+        n.add(asset)
+        for key in ASSET_TO_BLOCK_INHERIT:
+            if asset[key]:
+                n[key] = asset[key]
+            elif n[key]:
+                del(n[key])
+
+        for v in ["jingles", "promos", "post_main", "block_source", "genres"]:
+            if self.block.config.get(v, False):
+                n.config[v] = self.block.config[v]
+
+        return 'd'
+
 
     def get(self, *args, **kwargs):
         allow_reuse = kwargs.get("allow_reuse", False)
@@ -359,9 +382,8 @@ class DefaultSolver(DramaticaSolver):
         #import pdb; pdb.set_trace()
         if not self.block.items:
             if self.block.config.get("solve_empty", False):
+                print("Solving empty")
                 self.solve_empty()
-            #else:
-            #    return 'r'
 
 
         suggested   = suggested_duration(self.block.duration)
@@ -533,6 +555,20 @@ class MovieSolver(DramaticaSolver):
             self.block.add(asset)
 
         self.insert_post_main()
+
+        # COMMERCIAL BREAK #
+        ####################
+
+        # If remaining time is greater than 3 minutes add a commercial break
+        if self.block.remaining > 180:
+            asset = self.get(
+                self.block.config.get("block_source", "id_folder = 25")
+            )
+
+            if asset:
+                print("Splitting block using {}".format(asset))
+                self.insert_block(asset, start=self.block["start"])
+                
 
         while self.block.remaining > 0:
             print('loop')

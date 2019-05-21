@@ -36,9 +36,10 @@ class Template(DramaticaTemplate):
 
         self.add_block("06:00", title="Morning mourning")
         self.configure(
-            solver="MusicBlock", 
+            solver="Default", 
             genres=["Pop", "Rock", "Alt rock"],
             target_duration=dur("04:00:00"),
+            solve_empty=True,
             run_mode=2
             )
 
