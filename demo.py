@@ -106,7 +106,7 @@ def demo_assets():
             source="source",
             path="data/filler/{}.webm".format(i),
             duration=random.randint(30, 500),
-            id_folder=random.choice([5, 7]),
+            id_folder=20,
             id_object=i + 210,
         ) 
         assets.append(a)

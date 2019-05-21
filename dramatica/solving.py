@@ -508,17 +508,20 @@ class MovieSolver(DramaticaSolver):
             pre_main = list(pre_main)
 
         for definition in pre_main:
-            asset - self.get(definition)
+            asset = self.get(definition)
             if asset:
                 self.block.add(asset)
 
         return
+
+    def insert_post_main(self):
+        pass
     
     def solve(self):
         print("Solving {}".format(self.block))
         
         movie_source = self.block.config.get("movie_source", "id_folder IN (1)")
-        fill_source = self.block.config.get("fill_source", "id_folder IN (5, 7)")
+        fill_source = self.block.config.get("fill_source", "id_folder IN (20)")
         
         self.insert_pre_main()
 
@@ -529,9 +532,13 @@ class MovieSolver(DramaticaSolver):
             print("Appending {}".format(asset))
             self.block.add(asset)
 
+        self.insert_post_main()
+
         while self.block.remaining > 0:
-            asset = self.get(fill_source, best_fit=self.block.remaining)
+            print('loop')
+            asset = self.get(fill_source)
             if asset and self.block.remaining - asset.duration < 0:
+                print(asset.duration, self.block.remaining)
                 self.block.add(asset)
                 break
             
@@ -539,14 +546,14 @@ class MovieSolver(DramaticaSolver):
                 fill_source,
                 "io_duration < {}".format(self.block.remaining + SAFE_OVER),
             )  ## Fillers
-
+            print(asset, self.block.remaining)
             if not asset:
                 break
 
             print("Appending {}".format(asset))
             self.block.add(asset)
 
-        return 
+        return 'd'
 
 
 solvers = {

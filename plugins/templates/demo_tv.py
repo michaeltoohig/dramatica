@@ -44,13 +44,13 @@ class Template(DramaticaTemplate):
 
         self.add_block("10:00", title="Some movie")
         self.configure(
-            solver="DefaultSolver",
+            solver="MovieBlock",
             run_mode=2,
-            target_duration=dur("02:00:00"),
+            target_duration=dur("02:30:00"),
             genres=["movie"],
             )   
 
-        self.add_block("12:00", title="Rocking")
+        self.add_block("12:30", title="Rocking")
         self.configure(
             solver="MusicBlock",
             genres=["Rock"],
@@ -60,7 +60,7 @@ class Template(DramaticaTemplate):
 
         self.add_block("15:00", title="Another movie")
         self.configure(
-            solver="DefaultSolver",
+            solver="MovieBlock",
             genres=MAIN_GENRES
             )   
 
@@ -75,7 +75,7 @@ class Template(DramaticaTemplate):
 
         self.add_block("21:00", title="Movie of the day")
         self.configure(
-            solver="DefaultSolver",
+            solver="MovieBlock",
             genres=MAIN_GENRES
             )   
 
